@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .stripe-green {
+    background: repeating-linear-gradient(
+      -45deg,
+      #34d399,
+      #34d399 4px,
+      #10b981 4px,
+      #10b981 8px
+    );
+  }
+  .stripe-blue {
+    background: repeating-linear-gradient(
+      -45deg,
+      #93c5fd,
+      #93c5fd 4px,
+      #60a5fa 4px,
+      #60a5fa 8px
+    );
+  }
+  .stripe-amber {
+    background: repeating-linear-gradient(
+      -45deg,
+      #fcd34d,
+      #fcd34d 4px,
+      #f59e0b 4px,
+      #f59e0b 8px
+    );
+  }
+  .stripe-rose {
+    background: repeating-linear-gradient(
+      -45deg,
+      #f43f5e,
+      #f43f5e 4px,
+      #e11d48 4px,
+      #e11d48 8px
+    );
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@keyframes flowDash {
+  from {
+    stroke-dashoffset: 48;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes dischargePulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes waterRipple {
+  0% {
+    stroke-dashoffset: 24;
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.4;
+  }
+}
+
+.animate-flow-slow {
+  animation: flowDash 3.2s linear infinite;
+}
+
+.animate-flow-normal {
+  animation: flowDash 2.0s linear infinite;
+}
+
+.animate-flow-fast {
+  animation: flowDash 0.9s linear infinite;
+}
+
+.animate-discharge {
+  animation: dischargePulse 1.8s ease-in-out infinite;
+}
+
+.animate-ripple {
+  animation: waterRipple 1.4s ease-in-out infinite;
+}
+
+@keyframes waveAnimation {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-25%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes bubbleFloat {
+  0% {
+    transform: translateY(100%) scale(0.6);
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(0%) scale(1.1);
+    opacity: 0;
+  }
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-wave-slow {
+  animation: waveAnimation 4s ease-in-out infinite alternate;
+}
+
+.animate-wave-fast {
+  animation: waveAnimation 2s ease-in-out infinite alternate;
+}
+
+.animate-spin-slow {
+  animation: spinSlow 3s linear infinite;
+}
