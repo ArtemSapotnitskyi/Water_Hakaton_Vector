@@ -635,7 +635,7 @@ export const AdvancedCollectorMapView: React.FC = () => {
                       <g transform="translate(1560, 385)">
                         <rect x="0" y="0" width="180" height="26" rx="8" fill="#fef2f2" stroke="#f87171" strokeWidth="1.5" />
                         <text x="10" y="17" fill="#b91c1c" fontSize="11" fontWeight="bold">
-                          ⚠️ Spadek przepustowości: -60 m³/h
+                          Spadek przepustowości: -60 m³/h
                         </text>
                       </g>
                     )}
@@ -754,7 +754,7 @@ export const AdvancedCollectorMapView: React.FC = () => {
                       filter="url(#reliefGlow)"
                     />
                     <text x="1980" y="125" fill="#0891b2" fontSize="12" fontWeight="bold">
-                      PB-B1 ➔ Rzeka Nacyna ({totalDischargeRate} m³/h)
+                      PB-B1 &rarr; Rzeka Nacyna ({totalDischargeRate} m³/h)
                     </text>
 
                     {/* PB-WWTP into Ruda River */}
@@ -993,14 +993,14 @@ export const AdvancedCollectorMapView: React.FC = () => {
 
               <button
                 onClick={() => injectDisaster('pump_trip_p1')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ease-out shadow-sm flex items-center space-x-1.5 ${
                   isPump1Tripped
-                    ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
+                    ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse'
                     : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
                 }`}
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                <span>{lang === 'pl' ? '⚠️ Awaria Pompy P1 (PZ-1)' : '⚠️ Pump P1 Trip'}</span>
+                <span>{lang === 'pl' ? 'Awaria Pompy P1 (PZ-1)' : 'Pump P1 Trip'}</span>
               </button>
 
               <button
@@ -1009,10 +1009,10 @@ export const AdvancedCollectorMapView: React.FC = () => {
                   setDischargeAperture(85);
                   injectDisaster('rain_150');
                 }}
-                className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs transition-colors flex items-center space-x-1.5 shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-medium text-xs transition-all duration-150 ease-out flex items-center space-x-1.5 shadow-sm"
               >
                 <CloudRain className="w-3.5 h-3.5 text-blue-600" />
-                <span>{lang === 'pl' ? '🌧️ Nawałnica (194.8 mm/h)' : '🌧️ Storm Runoff'}</span>
+                <span>{lang === 'pl' ? 'Nawałnica (194.8 mm/h)' : 'Storm Runoff'}</span>
               </button>
 
               <button
@@ -1020,9 +1020,9 @@ export const AdvancedCollectorMapView: React.FC = () => {
                   setStormDischargeActive(false);
                   injectDisaster('reset_all');
                 }}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-xs transition-all duration-150 ease-out shadow-sm"
               >
-                <span>☀️ {lang === 'pl' ? 'Reset DWF' : 'Reset DWF'}</span>
+                <span>{lang === 'pl' ? 'Reset DWF' : 'Reset DWF'}</span>
               </button>
             </div>
           </div>
@@ -1154,27 +1154,6 @@ export const AdvancedCollectorMapView: React.FC = () => {
                 <strong className="text-slate-700">
                   {selectedStation.target_id || (lang === 'pl' ? 'Kolektor Główny' : 'Trunk Collector')}
                 </strong>
-              </div>
-            </div>
-
-            {/* Direct Operator Actions */}
-            <div className="pt-1 space-y-2">
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                {lang === 'pl' ? 'Dyspozycje SCADA:' : 'SCADA Operations:'}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => alert(`Załączono wymuszone tłoczenie agregatu dla stacji ${selectedStation.code}`)}
-                  className="py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors text-center shadow-xs"
-                >
-                  {lang === 'pl' ? 'Wymuś tłoczenie' : 'Force Pump'}
-                </button>
-                <button
-                  onClick={() => alert(`Skierowano ścieki stacji ${selectedStation.code} do bufora retencyjnego ZR`)}
-                  className="py-2.5 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs transition-colors text-center"
-                >
-                  {lang === 'pl' ? 'Buforuj w ZR' : 'Buffer to ZR'}
-                </button>
               </div>
             </div>
           </div>

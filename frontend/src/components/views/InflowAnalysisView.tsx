@@ -22,7 +22,8 @@ import {
   Clock,
   ArrowRight,
   ShieldCheck,
-  Zap
+  Zap,
+  UploadCloud
 } from 'lucide-react';
 import { getInflowAnalysis, getJuryReportExportUrl } from '../../services/api';
 import { InflowAnalysisResponse, SeasonalBreakdownItem, JuryReportItem } from '../../types';
@@ -30,7 +31,8 @@ import { useTelemetry } from '../../context/TelemetryContext';
 
 export const InflowAnalysisView: React.FC = () => {
   const { lang, telemetry } = useTelemetry();
-  const [station, setStation] = useState<'PZ1' | 'PNB1'>('PZ1');
+  const [selectedPreset, setSelectedPreset] = useState<string>('pz1_historical');
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [sensitivity, setSensitivity] = useState<number>(1.2);
   const [data, setData] = useState<InflowAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,61 @@ export const InflowAnalysisView: React.FC = () => {
 
   // Modernization Recommendations catalogue
   const actionsList = useMemo(() => {
-    if (station === 'PZ1') {
+    if (selectedPreset === 'rybnik_2025_2026_test' || (data && data.station.includes('Zlewnia PZ-1 / PNB-1'))) {
+      return [
+        {
+          id: 'rybnik_buffer_balance',
+          title: 'Optymalizacja buforowania retencji R2 i sterowania zasuwą Z12',
+          desc: (cost: number) =>
+            `Dynamiczne sterowanie retencją w zlewniach PZ-1 i PNB-1 redukuje udary burzowe o 42% i pozwala zaoszczędzić ok. ${cost.toLocaleString()} PLN w skali roku.`,
+          target: 'Zbiornik buforowy R2 & Kolektor grawitacyjny',
+          brigade: 'Dział Dyspozycji Mocy i SCADA PWiK Rybnik',
+          workType: 'Implementacja algorytmu predykcyjnego TTC w PLC',
+          progressPct: 88,
+          reductionTag: 'Redukcja zrzutów burzowych: 42%',
+          actionButtonText: 'Wdróż sterowanie predykcyjne',
+        },
+        {
+          id: 'rybnik_smoke_tests',
+          title: 'Wielkoobszarowa inspekcja dymowa przyłączy deszczowych',
+          desc: (cost: number) =>
+            `Identyfikacja i odcięcie nielegalnych podłączeń rynien w rejonie Zamysłowa i Niewiadomia obniży szczytowy napływ o 38%, oszczędzając ok. ${cost.toLocaleString()} PLN.`,
+          target: 'Zlewnie PZ-1 i PNB-1 (Rybnik)',
+          brigade: 'Brygady Pogotowia Sieciowego W-1 oraz W-2',
+          workType: 'Generator dymu + inspekcja CCTV studzienek',
+          progressPct: 75,
+          reductionTag: 'Wyeliminowanie wpięć rynien: 38%',
+          actionButtonText: 'Generuj zlecenia inspekcji',
+        },
+      ];
+    } else if (selectedPreset === 'pnb1_historical' || (data && data.station.includes('PNB'))) {
+      return [
+        {
+          id: 'pnb1_pump',
+          title: 'Wymiana zabezpieczenia termicznego pompy P1 (PNB-1)',
+          desc: (cost: number) =>
+            `Usunięcie skutków awarii z 05.06.2024 i przywrócenie pracy w układzie kaskadowym zmniejszy straty hydrauliczne i koszty o ok. ${cost.toLocaleString()} PLN.`,
+          target: 'Przepompownia PNB-1 (ul. Nakłończyka, Niewiadom)',
+          brigade: 'Zespół Automatyki i Aparatury Pomiarowej A-1 (Mistrz: K. Zieliński)',
+          workType: 'Wymiana przekaźnika termobimetalicznego oraz rewizja wirnika pompy P1',
+          progressPct: 85,
+          reductionTag: 'Przywrócenie sprawności pompy: 100%',
+          actionButtonText: 'Zleć naprawę pompy P1',
+        },
+        {
+          id: 'pnb1_buffer',
+          title: 'Optymalizacja poziomów retencji w zbiorniku ZR 48.2 m³',
+          desc: (cost: number) =>
+            `Zwiększenie wykorzystania retencji buforowej przytnie szczyty burzowe i obniży koszty tłoczenia o ok. ${cost.toLocaleString()} PLN.`,
+          target: 'Komora Retencyjna PNB-1',
+          brigade: 'Dział Dyspozycji Mocy i SCADA',
+          workType: 'Aktualizacja progów załączania L1/L2/L3 w sterowniku PLC',
+          progressPct: 72,
+          reductionTag: 'Redukcja szczytów tłoczenia: 28%',
+          actionButtonText: 'Wdróż progi retencji',
+        },
+      ];
+    } else {
       return [
         {
           id: 'pz1_smoke',
@@ -92,53 +148,65 @@ export const InflowAnalysisView: React.FC = () => {
           actionButtonText: 'Zleć montaż wkładów',
         },
       ];
-    } else {
-      return [
-        {
-          id: 'pnb1_pump',
-          title: 'Wymiana zabezpieczenia termicznego pompy P1 (PNB-1)',
-          desc: (cost: number) =>
-            `Usunięcie skutków awarii z 05.06.2024 i przywrócenie pracy w układzie kaskadowym zmniejszy straty hydrauliczne i koszty o ok. ${cost.toLocaleString()} PLN.`,
-          target: 'Przepompownia PNB-1 (ul. Nakłończyka, Niewiadom)',
-          brigade: 'Zespół Automatyki i Aparatury Pomiarowej A-1 (Mistrz: K. Zieliński)',
-          workType: 'Wymiana przekaźnika termobimetalicznego oraz rewizja wirnika pompy P1',
-          progressPct: 85,
-          reductionTag: 'Przywrócenie sprawności pompy: 100%',
-          actionButtonText: 'Zleć naprawę pompy P1',
-        },
-        {
-          id: 'pnb1_buffer',
-          title: 'Optymalizacja poziomów retencji w zbiorniku ZR 48.2 m³',
-          desc: (cost: number) =>
-            `Zwiększenie wykorzystania retencji buforowej przytnie szczyty burzowe i obniży koszty tłoczenia o ok. ${cost.toLocaleString()} PLN.`,
-          target: 'Komora Retencyjna PNB-1',
-          brigade: 'Dział Dyspozycji Mocy i SCADA',
-          workType: 'Aktualizacja progów załączania L1/L2/L3 w sterowniku PLC',
-          progressPct: 72,
-          reductionTag: 'Redukcja szczytów tłoczenia: 28%',
-          actionButtonText: 'Wdróż progi retencji',
-        },
-      ];
     }
-  }, [station]);
+  }, [selectedPreset, data]);
 
   const currentAction = actionsList[actionIndex % actionsList.length];
 
   // Fetch real hydraulic data
-  useEffect(() => {
+  const fetchData = async (
+    preset = selectedPreset,
+    sens = sensitivity,
+    files = uploadedFiles
+  ) => {
     setLoading(true);
-    getInflowAnalysis(station, sensitivity)
-      .then((res) => {
-        setData(res);
-        // Pre-select the extreme storm period or first period
-        if (res.seasonal_breakdown && res.seasonal_breakdown.length > 0) {
-          const storm = res.seasonal_breakdown.find((s) => s.category === 'STORM');
-          setSelectedPeriod(storm || res.seasonal_breakdown[0]);
+    try {
+      if (files && files.length > 0) {
+        const formData = new FormData();
+        files.forEach((file) => formData.append('files', file));
+        const res = await fetch(`/api/benchmark/upload?clean_data=true&model_type=blended`, {
+          method: 'POST',
+          body: formData,
+        });
+        const resData: InflowAnalysisResponse = await res.json();
+        setData(resData);
+        if (resData.seasonal_breakdown && resData.seasonal_breakdown.length > 0) {
+          const storm = resData.seasonal_breakdown.find((s) => s.category === 'STORM');
+          setSelectedPeriod(storm || resData.seasonal_breakdown[0]);
         }
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [station, sensitivity]);
+      } else {
+        const pParam = preset ? `&preset=${preset}` : '';
+        const st = preset === 'pnb1_historical' ? 'PNB1' : 'PZ1';
+        const res = await fetch(
+          `/api/inflow-analysis?station=${st}&sensitivity=${sens}&clean_data=true&model_type=blended${pParam}`
+        );
+        const resData: InflowAnalysisResponse = await res.json();
+        setData(resData);
+        if (resData.seasonal_breakdown && resData.seasonal_breakdown.length > 0) {
+          const storm = resData.seasonal_breakdown.find((s) => s.category === 'STORM');
+          setSelectedPeriod(storm || resData.seasonal_breakdown[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData(selectedPreset, sensitivity, uploadedFiles);
+  }, [selectedPreset, sensitivity]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setUploadedFiles(files);
+      setSelectedPreset('custom');
+      fetchData('custom', sensitivity, files);
+      showToast(`Wczytano plik: ${files.map((f) => f.name).join(', ')}`);
+    }
+  };
 
   // Seasonal periods (real or fallback)
   const seasonalPeriods: SeasonalBreakdownItem[] = useMemo(() => {
@@ -277,7 +345,7 @@ export const InflowAnalysisView: React.FC = () => {
         <span className="text-sm font-bold text-slate-600">
           Obliczanie modeli hydraulicznych DWF i bilansu wód przypadkowych...
         </span>
-        <span className="text-xs text-slate-400">Stacja: {station} | Próg DWF: {sensitivity.toFixed(2)}x</span>
+        <span className="text-xs text-slate-400">Zbiór: {data?.station || selectedPreset} | Próg DWF: {sensitivity.toFixed(2)}x</span>
       </div>
     );
   }
@@ -292,38 +360,98 @@ export const InflowAnalysisView: React.FC = () => {
         </div>
       )}
 
-      {/* Top Filter & Station Bar (Exact matching Image 1) */}
+      {/* Top Filter & Station Bar */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        {/* Station Tabs */}
-        <div className="flex items-center space-x-2 bg-[#f1f3f6] p-1 rounded-xl border border-slate-200/60">
+        {/* Dataset Tabs */}
+        <div className="flex items-center space-x-1.5 bg-[#f1f3f6] p-1 rounded-xl border border-slate-200/60 flex-wrap">
           <button
             onClick={() => {
-              setStation('PZ1');
+              setSelectedPreset('rybnik_2025_2026_test');
+              setUploadedFiles([]);
               setActionIndex(0);
               setWorkOrderSubmitted(false);
             }}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              station === 'PZ1'
-                ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-900'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+              selectedPreset === 'rybnik_2025_2026_test' && uploadedFiles.length === 0
+                ? 'bg-white text-blue-700 shadow-2xs border border-blue-200'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            PZ-1 (ul. Pełczyńskiego / Dolna Zamysłów)
+            <span>Zbiór 2025–2026 (PZ-1 + PNB-1)</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
+              Konkurs
+            </span>
           </button>
+
           <button
             onClick={() => {
-              setStation('PNB1');
+              setSelectedPreset('pz1_historical');
+              setUploadedFiles([]);
               setActionIndex(0);
               setWorkOrderSubmitted(false);
             }}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              station === 'PNB1'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              selectedPreset === 'pz1_historical' && uploadedFiles.length === 0
                 ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-900'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            PZ-1 (ul. Pełczyńskiego)
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedPreset('pnb1_historical');
+              setUploadedFiles([]);
+              setActionIndex(0);
+              setWorkOrderSubmitted(false);
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              selectedPreset === 'pnb1_historical' && uploadedFiles.length === 0
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             PNB-1 (Zlewnia Niewiadom)
           </button>
+
+          {/* Upload Dropdown / Button */}
+          <label
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+              uploadedFiles.length > 0
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span className="truncate max-w-[150px]">
+              {uploadedFiles.length > 0
+                ? uploadedFiles.length === 1
+                  ? uploadedFiles[0].name
+                  : `${uploadedFiles.length} tabel`
+                : 'Wgraj plik (CSV/TXT)'}
+            </span>
+            <input
+              type="file"
+              multiple
+              accept=".csv,.txt,.tsv,.xlsx,.ods"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </label>
+
+          {uploadedFiles.length > 0 && (
+            <button
+              onClick={() => {
+                setUploadedFiles([]);
+                setSelectedPreset('rybnik_2025_2026_test');
+              }}
+              title="Wyczyść pliki"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Dynamic Sensitivity Slider */}
@@ -349,19 +477,23 @@ export const InflowAnalysisView: React.FC = () => {
           </span>
         </div>
 
-        {/* Jury Export CTA */}
+        {/* Report Export CTA */}
         <a
-          href={getJuryReportExportUrl(station, sensitivity)}
+          href={
+            selectedPreset === 'rybnik_2025_2026_test' || uploadedFiles.length > 0
+              ? '/api/benchmark/export'
+              : getJuryReportExportUrl(selectedPreset === 'pnb1_historical' ? 'PNB1' : 'PZ1', sensitivity)
+          }
           download
-          onClick={() => showToast(`Pobrano raport DWF dla ${station} (${data.jury_records.length} rekordów)`)}
-          className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm"
+          onClick={() => showToast(`Pobrano raport DWF (${data.jury_records.length} rekordów)`)}
+          className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-all duration-150 ease-out shadow-sm active:scale-[0.98]"
         >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-          <span>Eksportuj Raport Konkursowy (CSV)</span>
+          <FileSpreadsheet className="w-4 h-4 text-white" />
+          <span>Eksportuj Raport DWF (CSV)</span>
         </a>
       </div>
 
-      {/* Main Bar Chart Card (Exact Layout of Reference Image 1) */}
+      {/* Main Bar Chart Card */}
       <div data-tour="inflow-chart" className="bg-white rounded-3xl p-6 border border-[#e8ecf1] shadow-2xs space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -369,7 +501,7 @@ export const InflowAnalysisView: React.FC = () => {
               Profil Infiltracji Wód Przypadkowych vs Baza Bezdeszczowa DWF
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Porównanie przepływu całkowitego do bazowego ścieku komunalnego. Rok 2024 ({station}).
+              Porównanie przepływu całkowitego do bazowego ścieku komunalnego — <strong className="text-slate-600 font-semibold">{data.station}</strong> ({data.metadata?.date_range || (selectedPreset === 'rybnik_2025_2026_test' ? 'Horyzont weryfikacyjny 2025–2026' : 'Rok 2024')}).
             </p>
           </div>
           {/* Legend */}
@@ -392,12 +524,12 @@ export const InflowAnalysisView: React.FC = () => {
         {/* Visual Columns (Dynamic, responsive, and clickable) */}
         <div className="pt-6 pb-2">
           <div className="h-56 flex items-end space-x-3 px-4 border-b border-slate-100 relative">
-            {/* Guide lines matching image 1 */}
+            {/* Guide lines matching dataset scales */}
             <div className="absolute inset-x-0 top-0 border-b border-dashed border-slate-200/80 flex justify-between text-[10px] text-slate-400 font-semibold px-2">
-              <span>Maksimum burzowe ({station === 'PZ1' ? '450 m³/h' : '55 m³/h'})</span>
+              <span>Maksimum okresu ({Math.round(Math.max(...seasonalPeriods.map(p => p.peak_flow_m3_h || 100)))} m³/h)</span>
             </div>
             <div className="absolute inset-x-0 top-1/2 border-b border-dashed border-slate-200/80 flex justify-between text-[10px] text-slate-400 font-semibold px-2">
-              <span>Średnia dobowa ({station === 'PZ1' ? '150 m³/h' : '15 m³/h'})</span>
+              <span>Średnia dobowa ({Math.round(data.total_measured_m3 / Math.max(seasonalPeriods.length * 720, 1))} m³/h)</span>
             </div>
 
             {/* Dynamic Bars rendered from real telemetry */}
@@ -406,13 +538,16 @@ export const InflowAnalysisView: React.FC = () => {
               const isStorm = period.category === 'STORM';
               const isInfiltration = period.category === 'INFILTRATION';
 
-              // Text on top of the bar
-              let pctLabel = `${period.dwf_pct}%`;
-              if (isInfiltration) {
-                pctLabel = `${period.accidental_pct}%`;
-              } else if (isStorm) {
+              let pctLabel = `${period.accidental_pct}% obcych`;
+              if (period.accidental_pct < 1.0) {
                 pctLabel = `${period.dwf_pct}% DWF`;
+              } else if (isStorm) {
+                pctLabel = `${period.accidental_pct}% (Udar)`;
+              } else if (isInfiltration) {
+                pctLabel = `${period.accidental_pct}% (Infiltracja)`;
               }
+
+              const accHeightPct = Math.min(100, Math.max(8, period.accidental_pct));
 
               return (
                 <div
@@ -426,24 +561,55 @@ export const InflowAnalysisView: React.FC = () => {
                       isStorm
                         ? 'text-rose-600 font-extrabold'
                         : isInfiltration
-                        ? 'text-blue-600'
+                        ? 'text-blue-600 font-bold'
                         : 'text-slate-600'
                     }`}
                   >
                     {pctLabel}
                   </span>
 
-                  {/* Bar shape */}
+                  {/* Multi-layer stacked bar showing DWF base and Infiltration / Storm cap */}
                   <div
                     style={{ height: `${period.relative_height_pct}%` }}
-                    className={`w-full rounded-t-xl transition-all duration-300 relative group-hover:opacity-90 ${
-                      isStorm
-                        ? 'bg-[#e11d48] shadow-lg shadow-rose-500/20 group-hover:scale-[1.02]'
-                        : isInfiltration
-                        ? 'stripe-blue border border-blue-400/80'
-                        : 'stripe-green border border-emerald-400/80'
-                    } ${isSelected ? 'ring-2 ring-offset-2 ring-slate-900' : ''}`}
-                  />
+                    className={`w-full rounded-t-xl transition-all duration-300 relative group-hover:opacity-95 overflow-hidden flex flex-col justify-end ${
+                      isSelected
+                        ? 'ring-2 ring-offset-2 ring-slate-900 shadow-md scale-[1.02]'
+                        : 'shadow-2xs'
+                    }`}
+                  >
+                    {isStorm ? (
+                      <>
+                        <div
+                          style={{ height: `${accHeightPct}%` }}
+                          className="w-full bg-[#e11d48] shadow-inner transition-all duration-300"
+                          title={`Udar burzowy: ${period.accidental_pct}%`}
+                        />
+                        <div
+                          style={{ height: `${Math.max(0, 100 - accHeightPct)}%` }}
+                          className="w-full stripe-green border-t border-emerald-400/60 transition-all duration-300"
+                          title={`Baza sanitarna DWF: ${period.dwf_pct}%`}
+                        />
+                      </>
+                    ) : isInfiltration ? (
+                      <>
+                        <div
+                          style={{ height: `${accHeightPct}%` }}
+                          className="w-full stripe-blue border-b border-blue-400/80 transition-all duration-300"
+                          title={`Infiltracja opadowa: ${period.accidental_pct}%`}
+                        />
+                        <div
+                          style={{ height: `${Math.max(0, 100 - accHeightPct)}%` }}
+                          className="w-full stripe-green border-t border-emerald-400/60 transition-all duration-300"
+                          title={`Baza sanitarna DWF: ${period.dwf_pct}%`}
+                        />
+                      </>
+                    ) : (
+                      <div
+                        className="w-full h-full stripe-green border border-emerald-400/80 transition-all duration-300"
+                        title="Norma sanitarna DWF"
+                      />
+                    )}
+                  </div>
 
                   {/* Bottom labels */}
                   <span
@@ -532,10 +698,10 @@ export const InflowAnalysisView: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h4 className="text-sm font-extrabold text-slate-900">
-                Struktura dopływów wód przypadkowych ({station})
+                Struktura dopływów wód przypadkowych ({data.station})
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
-                Łącznie skumulowano {data.total_accidental_m3.toLocaleString()} m³ wód opadowych w roku 2024
+                Łącznie skumulowano {data.total_accidental_m3.toLocaleString()} m³ wód opadowych ({data.metadata?.date_range || (selectedPreset === 'rybnik_2025_2026_test' ? 'Horyzont 2025–2026' : 'Rok 2024')})
               </p>
             </div>
             <button
@@ -563,18 +729,23 @@ export const InflowAnalysisView: React.FC = () => {
               </div>
             </div>
 
-            {/* Where the extra hours / waters go (replica of Image 1) */}
+            {/* Where the extra hours / waters go (Dynamic hydrodynamic decomposition) */}
             <div className="space-y-2.5">
               <div className="text-[11px] font-bold text-slate-400 uppercase">Źródła nieszczelności i dopływu</div>
               <div>
                 <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
                   <span>Infiltracja przez spękania rur</span>
                   <span className="text-rose-600 font-bold">
-                    46% ({((data.total_accidental_m3 * 0.46) / 1000).toFixed(1)}k m³)
+                    {data.infiltration_breakdown ? data.infiltration_breakdown.groundwater_pct : 46}% ({(
+                      ((data.infiltration_breakdown?.groundwater_m3 ?? data.total_accidental_m3 * 0.46)) / 1000
+                    ).toFixed(1)}k m³)
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[46%] h-full bg-rose-500 rounded-full stripe-rose" />
+                  <div
+                    className="h-full bg-rose-500 rounded-full stripe-rose transition-all duration-500"
+                    style={{ width: `${data.infiltration_breakdown ? data.infiltration_breakdown.groundwater_pct : 46}%` }}
+                  />
                 </div>
               </div>
 
@@ -582,11 +753,16 @@ export const InflowAnalysisView: React.FC = () => {
                 <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
                   <span>Nielegalne podłączenia rynien</span>
                   <span className="text-amber-600 font-bold">
-                    38% ({((data.total_accidental_m3 * 0.38) / 1000).toFixed(1)}k m³)
+                    {data.infiltration_breakdown ? data.infiltration_breakdown.roof_gutters_pct : 38}% ({(
+                      ((data.infiltration_breakdown?.roof_gutters_m3 ?? data.total_accidental_m3 * 0.38)) / 1000
+                    ).toFixed(1)}k m³)
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[38%] h-full bg-amber-500 rounded-full stripe-amber" />
+                  <div
+                    className="h-full bg-amber-500 rounded-full stripe-amber transition-all duration-500"
+                    style={{ width: `${data.infiltration_breakdown ? data.infiltration_breakdown.roof_gutters_pct : 38}%` }}
+                  />
                 </div>
               </div>
 
@@ -594,11 +770,16 @@ export const InflowAnalysisView: React.FC = () => {
                 <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
                   <span>Spływ powierzchniowy przez włazy</span>
                   <span className="text-blue-600 font-bold">
-                    16% ({((data.total_accidental_m3 * 0.16) / 1000).toFixed(1)}k m³)
+                    {data.infiltration_breakdown ? data.infiltration_breakdown.manholes_surface_pct : 16}% ({(
+                      ((data.infiltration_breakdown?.manholes_surface_m3 ?? data.total_accidental_m3 * 0.16)) / 1000
+                    ).toFixed(1)}k m³)
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="w-[16%] h-full bg-blue-500 rounded-full stripe-blue" />
+                  <div
+                    className="h-full bg-blue-500 rounded-full stripe-blue transition-all duration-500"
+                    style={{ width: `${data.infiltration_breakdown ? data.infiltration_breakdown.manholes_surface_pct : 16}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -675,7 +856,7 @@ export const InflowAnalysisView: React.FC = () => {
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-4">
           <div>
             <h4 className="text-sm font-extrabold text-slate-900">
-              Oficjalna Tabela Oceny Konkursowej (Wymóg Regulaminu PWiK)
+              Rejestr Zdarzeń Wód Przypadkowych
             </h4>
             <p className="text-xs text-slate-400 mt-0.5">
               Wyznaczone incydenty wód przypadkowych: Dzień, godziny wystąpienia, objętość (m³), koszt energii (1 zł/kWh)
@@ -777,7 +958,7 @@ export const InflowAnalysisView: React.FC = () => {
                     Elektroniczne Zlecenie Pracy PWiK
                   </h3>
                   <span className="text-[11px] text-slate-400">
-                    Nr: ZLEC/2024/PWiK/{station}/0891
+                    Nr: ZLEC/2024/PWiK/{selectedPreset === 'pnb1_historical' ? 'PNB1' : 'PZ1'}/0891
                   </span>
                 </div>
               </div>
@@ -835,7 +1016,7 @@ export const InflowAnalysisView: React.FC = () => {
                 onClick={() => {
                   setWorkOrderSubmitted(true);
                   setShowWorkOrderModal(false);
-                  showToast(`Zlecenie ZLEC/2024/PWiK/${station}/0891 przekazane do realizacji!`);
+                  showToast(`Zlecenie ZLEC/2024/PWiK/${selectedPreset === 'pnb1_historical' ? 'PNB1' : 'PZ1'}/0891 przekazane do realizacji!`);
                 }}
                 className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs transition-all shadow-md shadow-blue-500/20 flex items-center justify-center space-x-2"
               >

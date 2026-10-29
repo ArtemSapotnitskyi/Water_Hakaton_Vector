@@ -128,12 +128,23 @@ class DataLoader:
         pz1_txt = RYBNIK_DIR / "PZ1_2024.txt"
         if pz1_txt.exists():
             try:
-                fdf = pd.read_csv(pz1_txt, sep="\t", names=["tag", "timestamp", "counter_m3", "status"], skiprows=1)
+                fdf = pd.read_csv(
+                    pz1_txt,
+                    sep="\t",
+                    names=["tag", "timestamp", "counter_m3", "status"],
+                    encoding="utf-8-sig",
+                    header=None,
+                    low_memory=False
+                )
                 fdf["timestamp"] = pd.to_datetime(fdf["timestamp"], errors="coerce")
-                fdf["counter_m3"] = pd.to_numeric(fdf["counter_m3"], errors="coerce")
+                fdf["counter_m3"] = pd.to_numeric(
+                    fdf["counter_m3"].astype(str).str.replace(",", ".").str.replace("--", "NaN"),
+                    errors="coerce"
+                )
+                fdf["status"] = fdf["status"].astype(str).str.strip()
                 fdf = fdf.dropna(subset=["timestamp", "counter_m3"]).sort_values("timestamp")
                 # Filter March 2024 corrupted freeze (mentor noted: "w marcu licznik stał 8 dni, potem rósł x10")
-                fdf = fdf[~((fdf["timestamp"] >= "2024-03-01") & (fdf["timestamp"] <= "2024-03-25"))]
+                fdf = fdf[~((fdf["timestamp"] >= "2024-03-01 00:00:00") & (fdf["timestamp"] <= "2024-03-21 23:59:59"))]
                 results["pz1_flow"] = fdf
             except Exception as e:
                 print(f"[DataLoader] Error loading PZ1 flow text: {e}")
@@ -141,9 +152,20 @@ class DataLoader:
         pnb1_txt = RYBNIK_DIR / "PNB1_2024.txt"
         if pnb1_txt.exists():
             try:
-                fdf = pd.read_csv(pnb1_txt, sep="\t", names=["tag", "timestamp", "counter_m3", "status"], skiprows=1)
+                fdf = pd.read_csv(
+                    pnb1_txt,
+                    sep="\t",
+                    names=["tag", "timestamp", "counter_m3", "status"],
+                    encoding="utf-8-sig",
+                    header=None,
+                    low_memory=False
+                )
                 fdf["timestamp"] = pd.to_datetime(fdf["timestamp"], errors="coerce")
-                fdf["counter_m3"] = pd.to_numeric(fdf["counter_m3"], errors="coerce")
+                fdf["counter_m3"] = pd.to_numeric(
+                    fdf["counter_m3"].astype(str).str.replace(",", ".").str.replace("--", "NaN"),
+                    errors="coerce"
+                )
+                fdf["status"] = fdf["status"].astype(str).str.strip()
                 fdf = fdf.dropna(subset=["timestamp", "counter_m3"]).sort_values("timestamp")
                 results["pnb1_flow"] = fdf
             except Exception as e:

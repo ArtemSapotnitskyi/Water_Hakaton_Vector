@@ -14,13 +14,31 @@ import {
   ArrowDownRight,
   MapPin,
   Cpu,
-  SlidersHorizontal
+  SlidersHorizontal,
+  RotateCcw,
+  Play,
+  Pause,
+  Clock,
+  Database,
+  Waves
 } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 import { AdvancedCollectorMapView } from './AdvancedCollectorMapView';
 
 export const ScadaTwinView: React.FC = () => {
-  const { telemetry, adjustValve, togglePump, lang, injectDisaster } = useTelemetry();
+  const {
+    telemetry,
+    adjustValve,
+    togglePump,
+    lang,
+    injectDisaster,
+    playSimulation,
+    pauseSimulation,
+    setSimulationSpeed,
+    seekSimulationTimeline,
+    setSimulationDataset,
+    jumpToSimulationEvent
+  } = useTelemetry();
   const [viewMode, setViewModeState] = useState<'SIMPLE' | 'ADVANCED'>(() => {
     try {
       const saved = localStorage.getItem('hydroflow_scada_view_mode');
@@ -65,6 +83,7 @@ export const ScadaTwinView: React.FC = () => {
   const getStatusColor = (status: string) => {
     if (status === 'CRITICAL') return 'text-rose-600 bg-rose-50 border-rose-200';
     if (status === 'WARNING') return 'text-amber-600 bg-amber-50 border-amber-200';
+    if (status === 'ELEVATED') return 'text-blue-700 bg-blue-50 border-blue-200';
     return 'text-emerald-600 bg-emerald-50 border-emerald-200';
   };
 
@@ -91,11 +110,23 @@ export const ScadaTwinView: React.FC = () => {
             <span>TTC Zbiornika PZ-1 (ZR 311.4 m³)</span>
             <Activity className="w-4 h-4 text-rose-500" />
           </div>
-          <div className="text-2xl font-extrabold text-slate-900">
-            {pz1?.ttc_minutes !== null ? `${pz1?.ttc_minutes} min` : 'Bezpieczny'}
+          <div className={`text-2xl font-extrabold ${pz1?.pct_full >= 99.0 ? 'text-rose-600 animate-pulse' : 'text-slate-900'}`}>
+            {pz1?.pct_full >= 99.0
+              ? 'PRZELEW'
+              : pz1?.ttc_minutes !== null && pz1?.ttc_minutes !== undefined
+              ? (pz1.ttc_minutes <= 0.5 ? '< 1 min' : `${pz1.ttc_minutes} min`)
+              : (pz1?.inflow_m3_h < pz1?.outflow_m3_h ? 'Opróżnianie' : 'Bezpieczny')}
           </div>
           <div className={`mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(pz1?.status || 'SAFE')}`}>
-            {pz1?.status === 'CRITICAL' ? 'ALARM: PRZELEW RETENCJI' : (pz1?.status === 'WARNING' ? 'UWAGA: ZR > 75%' : 'STABILNY')}
+            {pz1?.pct_full >= 99.0
+              ? 'ALARM: PRZELEW RETENCJI'
+              : pz1?.status === 'CRITICAL'
+              ? 'ALARM: TTC < 7 MIN'
+              : pz1?.status === 'WARNING'
+              ? 'UWAGA: TTC < 15 MIN'
+              : pz1?.status === 'ELEVATED'
+              ? 'BUFOR: < 60 MIN'
+              : 'STABILNY'}
           </div>
         </div>
 
@@ -123,6 +154,204 @@ export const ScadaTwinView: React.FC = () => {
           <div className="mt-1 text-[11px] text-emerald-600 font-medium">
             Taryfa PWiK Rybnik: 1.00 zł/kWh
           </div>
+        </div>
+      </div>
+
+      {/* Interactive Timeline & Dataset Playback Engine */}
+      <div className="bg-white rounded-3xl p-5 border border-[#e8ecf1] shadow-2xs space-y-4">
+        {/* Top: Dataset Ribbon & Status */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+              <Database className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-bold text-slate-900">
+                  {lang === 'pl' ? 'Oś Czasu Zbioru SCADA' : 'SCADA Dataset Timeline'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                  {telemetry.dataset_name || 'Zbiór weryfikacyjny 2025–2026'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {lang === 'pl'
+                  ? 'Symulacja odtwarza rzeczywiste pomiary przepływów i energii krok po kroku wzdłuż osi czasu bazy danych'
+                  : 'Simulation plays historical flow and energy telemetry step-by-step along the dataset timeline'}
+              </p>
+            </div>
+          </div>
+
+          {/* Dataset Switcher Buttons */}
+          <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-2xl text-xs font-semibold">
+            <button
+              onClick={() => setSimulationDataset('rybnik_2025_2026_test')}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                (telemetry.dataset_id || 'rybnik_2025_2026_test') === 'rybnik_2025_2026_test'
+                  ? 'bg-white text-blue-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Zbiór 2025–2026 (15k h)
+            </button>
+            <button
+              onClick={() => setSimulationDataset('pz1_historical')}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                telemetry.dataset_id === 'pz1_historical'
+                  ? 'bg-white text-blue-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              PZ-1 2024 (8.7k h)
+            </button>
+            <button
+              onClick={() => setSimulationDataset('pnb1_historical')}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                telemetry.dataset_id === 'pnb1_historical'
+                  ? 'bg-white text-blue-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              PNB-1 2024 (8.7k h)
+            </button>
+            <button
+              onClick={() => setSimulationDataset('storm_ruda')}
+              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                telemetry.dataset_id === 'storm_ruda'
+                  ? 'bg-white text-rose-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Nawałnica 13.07 (Stress)
+            </button>
+          </div>
+        </div>
+
+        {/* Middle: Interactive Scrubber Slider with Clock & Play Controls */}
+        <div className="bg-[#f8fafc] rounded-2xl p-4 border border-slate-200/80 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            {/* Play/Pause & Time Indicator */}
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => (telemetry.is_paused ? playSimulation() : pauseSimulation())}
+                className="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shadow-sm transition-all cursor-pointer"
+                title={telemetry.is_paused ? 'Odtwórz' : 'Wstrzymaj'}
+              >
+                {telemetry.is_paused ? (
+                  <Play className="w-4 h-4 fill-current ml-0.5" />
+                ) : (
+                  <Pause className="w-4 h-4 fill-current" />
+                )}
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs font-black text-slate-900 font-mono">
+                    {telemetry.sim_time}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {lang === 'pl' ? 'Krok' : 'Step'} {((telemetry.timeline_index || 0) + 1).toLocaleString()} / {(telemetry.timeline_total || 15264).toLocaleString()} ({telemetry.timeline_progress_pct || 0}%)
+                </span>
+              </div>
+            </div>
+
+            {/* Instant Telemetry Badges for this exact step */}
+            <div className="flex items-center space-x-2 text-xs flex-wrap gap-y-1">
+              <div className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl shadow-2xs flex items-center space-x-1.5">
+                <span className="text-slate-400 font-medium">Q(PZ-1):</span>
+                <strong className="text-slate-900 font-extrabold">{telemetry.measured_flow_pz1_m3_h ?? pz1?.inflow_m3_h} m³/h</strong>
+              </div>
+              <div className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl shadow-2xs flex items-center space-x-1.5">
+                <span className="text-slate-400 font-medium">Q(PNB-1):</span>
+                <strong className="text-slate-900 font-extrabold">{telemetry.measured_flow_pnb1_m3_h ?? pnb1?.inflow_m3_h} m³/h</strong>
+              </div>
+              <div className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl shadow-2xs flex items-center space-x-1.5">
+                <span className="text-slate-400 font-medium">Energia:</span>
+                <strong className="text-amber-600 font-extrabold">{telemetry.measured_energy_kwh ?? 9.98} kWh</strong>
+              </div>
+
+              {/* Speed Buttons */}
+              <div className="flex items-center space-x-0.5 bg-white border border-slate-200 rounded-xl p-0.5">
+                {[
+                  { spd: 1, label: '1x (10 min / godzina)' },
+                  { spd: 2, label: '2x (5 min / godzina)' },
+                  { spd: 5, label: '5x (1 min / godzina)' },
+                  { spd: 10, label: '10x (15 sek / godzina)' },
+                  { spd: 60, label: '60x (2.5 sek / godzina)' }
+                ].map(({ spd, label }) => (
+                  <button
+                    key={spd}
+                    onClick={() => setSimulationSpeed(spd)}
+                    title={label}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      Math.round(telemetry.speed_factor) === spd && !telemetry.is_paused
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {spd === 10 ? '10x (15s)' : (spd === 1 ? '1x (10m)' : `${spd}x`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Scrubber Range Slider */}
+          <div className="space-y-1">
+            <input
+              type="range"
+              min={0}
+              max={Math.max(1, (telemetry.timeline_total || 15264) - 1)}
+              value={telemetry.timeline_index || 0}
+              onChange={(e) => seekSimulationTimeline(Number(e.target.value))}
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            />
+            <div className="flex justify-between text-[10px] text-slate-400 font-semibold px-0.5">
+              <span>{telemetry.dataset_id === 'storm_ruda' ? '2024-07-13 13:00' : (telemetry.dataset_id?.includes('2024') ? '2024-01-01 00:00' : '2025-01-01 00:00')}</span>
+              <span className="text-blue-600 font-bold">Przesuń suwak, aby natychmiast przejść do dowolnej daty i godziny</span>
+              <span>{telemetry.dataset_id === 'storm_ruda' ? '2024-07-14 03:00' : (telemetry.dataset_id?.includes('2024') ? '2024-12-31 23:00' : '2026-09-28 23:00')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom: Event Bookmarks (Szybkie Przejścia do Anomalii i Nawałnic) */}
+        <div className="flex items-center space-x-2 flex-wrap gap-y-1.5 pt-1">
+          <span className="text-xs font-bold text-slate-700 flex items-center space-x-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>{lang === 'pl' ? 'Kluczowe Zdarzenia w Zbiorze:' : 'Key Timeline Events:'}</span>
+          </span>
+          <button
+            onClick={() => jumpToSimulationEvent('storm_jul_2025')}
+            className="px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200 transition-all flex items-center space-x-1 cursor-pointer"
+          >
+            <span>🌊 22.07.2025 Letnia Nawałnica</span>
+          </button>
+          <button
+            onClick={() => jumpToSimulationEvent('storm_sep_2025')}
+            className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold border border-rose-200 transition-all flex items-center space-x-1 cursor-pointer"
+          >
+            <span>⚡ 14.09.2025 Szczyt Burzowy (PZ-1: 599 m³/h)</span>
+          </button>
+          <button
+            onClick={() => jumpToSimulationEvent('thaw_mar_2025')}
+            className="px-2.5 py-1 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-[11px] font-bold border border-cyan-200 transition-all flex items-center space-x-1 cursor-pointer"
+          >
+            <span>❄️ 12.03.2025 Roztopy Wiosenne</span>
+          </button>
+          <button
+            onClick={() => jumpToSimulationEvent('storm_may_2026')}
+            className="px-2.5 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-bold border border-purple-200 transition-all flex items-center space-x-1 cursor-pointer"
+          >
+            <span>🌪️ 12.05.2026 Nawałnica 2026 (PZ-1: 600 m³/h)</span>
+          </button>
+          <button
+            onClick={() => jumpToSimulationEvent('pump_trip_p1')}
+            className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-300 transition-all flex items-center space-x-1 cursor-pointer"
+          >
+            <span>⚠️ Awaria Pompy P1 (Zrzut)</span>
+          </button>
         </div>
       </div>
 
@@ -186,8 +415,8 @@ export const ScadaTwinView: React.FC = () => {
                     Schemat: ul. Pod Lasem 62
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Kaskada pompowni zlewni Kolektora "B": PZ-1 (Zamysłów) oraz PNB-1 (Niewiadom) ➔ Oczyszczalnia Orzepowice
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Kaskada pompowni zlewni Kolektora "B": PZ-1 (Zamysłów) oraz PNB-1 (Niewiadom) &rarr; Oczyszczalnia Orzepowice
                 </p>
               </div>
 
@@ -357,29 +586,30 @@ export const ScadaTwinView: React.FC = () => {
                 <div className="flex items-center space-x-2.5">
                   <button
                     onClick={() => injectDisaster('rain_150')}
-                    className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs transition-colors flex items-center space-x-1.5 shadow-2xs"
+                    className="px-3.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-medium text-xs transition-all duration-150 ease-out flex items-center space-x-1.5 shadow-sm active:scale-[0.98]"
                   >
                     <CloudRain className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{lang === 'pl' ? '🌧️ Nawałnica (194.8 mm/h)' : '🌧️ Storm Runoff (194.8 mm/h)'}</span>
+                    <span>{lang === 'pl' ? 'Nawałnica (194.8 mm/h)' : 'Storm Runoff (194.8 mm/h)'}</span>
                   </button>
 
                   <button
                     onClick={() => injectDisaster('pump_trip_p1')}
-                    className={`px-3.5 py-2 rounded-xl font-bold text-xs transition-colors flex items-center space-x-1.5 shadow-2xs ${
+                    className={`px-3.5 py-1.5 rounded-lg font-medium text-xs transition-all duration-150 ease-out flex items-center space-x-1.5 shadow-sm active:scale-[0.98] ${
                       p1Pz1?.status === 'FAULT'
-                        ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
+                        ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse'
                         : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
                     }`}
                   >
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                    <span>{lang === 'pl' ? '⚠️ Awaria Pompy P1 (PZ-1)' : '⚠️ P1 Pump Trip (PZ-1)'}</span>
+                    <span>{lang === 'pl' ? 'Awaria Pompy P1 (PZ-1)' : 'P1 Pump Trip (PZ-1)'}</span>
                   </button>
 
                   <button
                     onClick={() => injectDisaster('reset_all')}
-                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors shadow-2xs"
+                    className="px-3.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-xs transition-all duration-150 ease-out flex items-center space-x-1.5 shadow-sm active:scale-[0.98]"
                   >
-                    <span>☀️ {lang === 'pl' ? 'Reset DWF' : 'Reset DWF'}</span>
+                    <RotateCcw className="w-3.5 h-3.5 text-gray-600" />
+                    <span>{lang === 'pl' ? 'Reset DWF' : 'Reset DWF'}</span>
                   </button>
                 </div>
               </div>
@@ -501,18 +731,15 @@ export const ScadaTwinView: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-2 flex items-center space-x-2">
+            <div className="pt-2">
               <button
                 onClick={() => {
                   togglePump('P2_R1', 'start');
                   adjustValve('Z12', 100.0);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all shadow-sm text-center"
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all shadow-sm text-center"
               >
                 Model this change (Załącz P2)
-              </button>
-              <button className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors">
-                Odrzuć
               </button>
             </div>
           </div>

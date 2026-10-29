@@ -1,5 +1,6 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal, Any, Union
 from pydantic import BaseModel, Field
+
 
 class TankState(BaseModel):
     id: str
@@ -73,14 +74,24 @@ class TelemetrySnapshot(BaseModel):
     total_outflow_m3_h: float
     diverted_to_buffer_m3: float
     cost_accumulated_pln: float
+    dataset_id: Optional[str] = "rybnik_2025_2026_test"
+    dataset_name: Optional[str] = "Zbiór weryfikacyjny 2025–2026 (PZ-1 + PNB-1)"
+    timeline_index: Optional[int] = 0
+    timeline_total: Optional[int] = 0
+    timeline_progress_pct: Optional[float] = 0.0
+    measured_flow_pz1_m3_h: Optional[float] = 0.0
+    measured_flow_pnb1_m3_h: Optional[float] = 0.0
+    measured_energy_kwh: Optional[float] = 0.0
 
 class SimulationControlRequest(BaseModel):
-    action: str  # "play", "pause", "set_speed", "set_mode", "inject_disaster", "acknowledge_alarm", "reset"
+    action: str  # "play", "pause", "set_speed", "set_mode", "inject_disaster", "acknowledge_alarm", "reset", "seek_timeline", "set_dataset", "jump_to_event"
     speed: Optional[float] = None
     mode: Optional[str] = None
-    disaster_type: Optional[str] = None  # "rain_150", "pump_trip_p1", "power_outage", "reset_all"
+    disaster_type: Optional[str] = None  # "rain_150", "pump_trip_p1", "power_outage", "reset_all", or event bookmark id
     alarm_id: Optional[str] = None
     operator: Optional[str] = "Dyspozytor Główny"
+    dataset_id: Optional[str] = None
+    timeline_index: Optional[int] = None
 
 class ValveControlRequest(BaseModel):
     valve_id: str
@@ -188,6 +199,87 @@ class EnergyAnalyticsResponse(BaseModel):
     monthly_trends: List[EnergyMonthlyItem]
     scatter_points: List[dict]
     pump_fleet: List[PumpFleetItem]
+    dataset_name: Optional[str] = None
+    dataset_preset: Optional[str] = None
+    dataset_records: Optional[int] = None
+    dataset_date_range: Optional[str] = None
+
+class RawVsCleanedStats(BaseModel):
+    is_cleaned: bool = Field(..., description="Whether sensor calibration anomalies were masked and sanitized")
+    corrupted_records_count: int = Field(..., description="Total raw SCADA telemetry records tainted in the anomaly window")
+    masked_window_start: str = Field(..., description="ISO timestamp of corrupted window start")
+    masked_window_end: str = Field(..., description="ISO timestamp of corrupted window end")
+    anomaly_description: Optional[str] = None
+
+class FeatureImportanceItem(BaseModel):
+    feature_name: str = Field(..., description="Technical feature identifier (e.g. flow_lag_1, delta_flow_1h)")
+    display_name: str = Field(..., description="Human-readable Polish label for dispatcher")
+    importance_pct: float = Field(..., description="Normalized importance percentage [0-100%]")
+    category: str = Field(..., description="Feature category: TELEMETRY_LAG, FLOW_DYNAMICS, CALENDAR_CYCLE, SEASONAL")
+    description: str = Field(..., description="Physical explanation of what this feature captures")
+
+class EvaluationMetricsPayload(BaseModel):
+    mae_flow: float = Field(..., description="Mean Absolute Error for flow in m3/h")
+    mape_flow: float = Field(..., description="Epsilon-guarded MAPE for flow in %")
+    r2_flow: float = Field(..., description="Coefficient of determination R2 for flow")
+    mae_energy: float = Field(..., description="Mean Absolute Error for energy in kWh")
+    mape_energy: float = Field(..., description="Epsilon-guarded MAPE for energy in %")
+    r2_energy: float = Field(..., description="Coefficient of determination R2 for energy")
+    smape_energy: Optional[float] = Field(None, description="Symmetric MAPE for energy in %")
+
+class SingleModelEvaluation(BaseModel):
+    model_id: Literal["statistical_dwf", "ml_ensemble", "blended"]
+    model_name: str
+    model_description: str
+    metrics: EvaluationMetricsPayload
+    training_time_ms: float
+    inference_time_ms: float
+
+class MetricDeltaItem(BaseModel):
+    absolute_diff: float
+    improvement_pct: float
+    winner: Literal["statistical_dwf", "ml_ensemble", "tie"]
+
+class DualModelComparisonResponse(BaseModel):
+    station: str
+    evaluation_window: Dict[str, Any]
+    statistical_dwf: SingleModelEvaluation
+    ml_ensemble: SingleModelEvaluation
+    blended: SingleModelEvaluation
+    deltas: Dict[str, MetricDeltaItem]
+    recommended_model: Literal["statistical_dwf", "ml_ensemble", "blended"]
+    justification_pl: str
+    justification_en: str
+
+class Forecast720hItem(BaseModel):
+    timestamp: str = Field(..., description="ISO timestamp YYYY-MM-DDTHH:00:00")
+    time_label: str = Field(..., description="Short display label e.g. 15.07 14:00")
+    hour_index: int = Field(..., description="Horizon hour index 0..719")
+    predicted_flow_m3: float
+    predicted_energy_kwh: float
+    dwf_baseline_m3: float
+    dwf_baseline_kwh: float
+    lower_95_flow_m3: float
+    upper_95_flow_m3: float
+    lower_95_energy_kwh: float
+    upper_95_energy_kwh: float
+    risk_level: Literal["SAFE", "ELEVATED", "CRITICAL"] = "SAFE"
+    predicted_kwh: Optional[float] = None
+    lower_95_kwh: Optional[float] = None
+    upper_95_kwh: Optional[float] = None
+
+class InfiltrationBreakdown(BaseModel):
+    groundwater_pct: float = Field(..., description="Infiltracja gruntowa - procent udzialu")
+    groundwater_m3: float = Field(..., description="Infiltracja gruntowa - objetosc w m3")
+    roof_gutters_pct: float = Field(..., description="Nielegalne wpiecia rynien - procent udzialu")
+    roof_gutters_m3: float = Field(..., description="Nielegalne wpiecia rynien - objetosc w m3")
+    manholes_surface_pct: float = Field(..., description="Wlazy i splyw powierzchniowy - procent udzialu")
+    manholes_surface_m3: float = Field(..., description="Wlazy i splyw powierzchniowy - objetosc w m3")
+    catchment_name: str = Field(..., description="Nazwa analizowanej zlewni / stacji")
+    methodology: str = Field(
+        default="Bilans hydrodynamiczny min/max (PN-EN 752 / ATV-A 118)",
+        description="Metoda dekompozycji fizycznej"
+    )
 
 class InflowAnalysisResponse(BaseModel):
     station: str
@@ -205,3 +297,12 @@ class InflowAnalysisResponse(BaseModel):
     forecast_trends: Optional[List[ForecastItem]] = None
     failures_summary: Optional[Dict[str, int]] = None
     seasonal_breakdown: Optional[List[dict]] = None
+    raw_vs_cleaned_stats: Optional[RawVsCleanedStats] = None
+    model_type: Optional[str] = "blended"
+    evaluation_metrics: Optional[EvaluationMetricsPayload] = None
+    feature_importance: Optional[List[FeatureImportanceItem]] = None
+    forecast_720h: Optional[List[Forecast720hItem]] = None
+    dwf_series: Optional[List[dict]] = None
+    dual_model_comparison: Optional[DualModelComparisonResponse] = None
+    infiltration_breakdown: Optional[InfiltrationBreakdown] = None
+

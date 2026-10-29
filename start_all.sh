@@ -6,6 +6,13 @@ echo " Starting HydroPulse Water SCADA Twin & Anomaly Dashboard "
 echo "=========================================================="
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+export PATH="$HOME/.local/bin:$PATH"
+
+# Auto-initialize .env if missing
+if [ ! -f "$DIR/.env" ] && [ -f "$DIR/.env.example" ]; then
+    echo "Creating .env from .env.example..."
+    cp "$DIR/.env.example" "$DIR/.env"
+fi
 
 # 1. Start Backend
 echo "Starting Backend on http://localhost:8000 ..."

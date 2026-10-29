@@ -18,32 +18,31 @@ export const EmergencyModal: React.FC = () => {
     togglePump('P2_R1', 'start');
     // 3. Trigger backend emergency handler
     await controlSimulation({ action: 'execute_emergency', operator: 'Dyspozytor Główny' });
-    acknowledgeAlarm();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border-2 border-rose-500 overflow-hidden transform animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="w-full max-w-lg bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden transform animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="bg-rose-500 text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-red-600 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-2xl bg-white/20 flex items-center justify-center animate-bounce">
+            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
               <ShieldAlert className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-rose-100">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-red-100">
                 SCADA Kwitowanie Alarmu Krytycznego
               </div>
-              <h2 className="text-base font-extrabold">{alarm.title}</h2>
+              <h2 className="text-base font-semibold">{alarm.title}</h2>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[11px] font-bold">
+            <span className="px-2.5 py-0.5 rounded-md bg-white/20 text-white text-xs font-medium">
               {alarm.station}
             </span>
             <button
               onClick={acknowledgeAlarm}
-              className="p-1 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
+              className="p-1 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
               title="Zamknij / Pomiń"
             >
               <X className="w-4 h-4" />
@@ -53,33 +52,33 @@ export const EmergencyModal: React.FC = () => {
 
         {/* Modal Body */}
         <div className="p-6 space-y-4">
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 text-rose-950 text-xs leading-relaxed font-medium">
+          <div className="p-4 rounded-lg bg-red-50 border border-red-100 text-red-950 text-xs leading-relaxed font-normal">
             {alarm.description}
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-[10px] text-slate-400 font-semibold uppercase">Czas Zdarzenia</div>
-              <div className="font-bold text-slate-800 mt-0.5">{alarm.timestamp}</div>
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+              <div className="text-[10px] text-gray-500 font-medium uppercase">Czas Zdarzenia</div>
+              <div className="font-semibold text-gray-900 mt-0.5">{alarm.timestamp}</div>
             </div>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-[10px] text-slate-400 font-semibold uppercase">Priorytet</div>
-              <div className="font-bold text-rose-600 mt-0.5 flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block" />
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+              <div className="text-[10px] text-gray-500 font-medium uppercase">Priorytet</div>
+              <div className="font-semibold text-red-600 mt-0.5 flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-600 inline-block" />
                 <span>POZIOM 1 - KRYTYCZNY</span>
               </div>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-blue-50/80 border border-blue-100 text-xs text-blue-900 flex items-start space-x-3">
-            <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex-shrink-0 flex items-center justify-center font-bold text-[11px] mt-0.5">
-              AI
+          <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start space-x-3">
+            <div className="w-6 h-6 rounded-md bg-blue-600 text-white flex-shrink-0 flex items-center justify-center font-semibold text-[10px] mt-0.5">
+              SCADA
             </div>
             <div>
-              <div className="font-bold">
+              <div className="font-semibold text-blue-900">
                 {lang === 'pl' ? 'Zalecana reakcja dyspozytorska:' : 'Recommended Dispatcher Action:'}
               </div>
-              <div className="text-blue-800 text-[11px] mt-0.5">
+              <div className="text-blue-800 text-xs mt-0.5 leading-relaxed">
                 {lang === 'pl'
                   ? 'Natychmiastowe otwarcie zasuwy Z_PZ1 na 100% do Kolektora B oraz załączenie obu pomp P1 i P2 (2x21 kW) w celu bezpiecznego zrzutu ścieków i ochrony retencji ZR 311.4 m³ przed przelaniem.'
                   : 'Immediately open discharge valve Z_PZ1 to 100% into Collector B and stage both 21 kW pumps P1 & P2 to safely evacuate wastewater and protect retention basin ZR 311.4 m³.'}
@@ -89,21 +88,21 @@ export const EmergencyModal: React.FC = () => {
         </div>
 
         {/* Modal Actions */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-3">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-end space-x-3">
           <button
             onClick={handleExecuteEmergency}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
+            className="rounded-lg font-medium transition-all duration-150 ease-out bg-blue-600 text-white hover:bg-blue-700 shadow-sm active:scale-[0.98] active:translate-y-0 px-4 py-2 text-xs flex items-center space-x-1.5"
           >
             <span>
-              {lang === 'pl' ? 'Zastosuj procedurę awaryjną (Otwórz Z_PZ1 & Załącz P1/P2)' : 'Execute Emergency Flush (Open Z_PZ1 & Start P1/P2)'}
+              {lang === 'pl' ? 'Zastosuj procedurę awaryjną' : 'Execute Emergency Flush'}
             </span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={acknowledgeAlarm}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm"
+            className="rounded-lg font-medium transition-all duration-150 ease-out bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 shadow-sm active:scale-[0.98] active:translate-y-0 px-4 py-2 text-xs flex items-center space-x-1.5"
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
             <span>{lang === 'pl' ? 'Potwierdź przyjęcie alarmu (ACK)' : 'Acknowledge Alarm (ACK)'}</span>
           </button>
         </div>

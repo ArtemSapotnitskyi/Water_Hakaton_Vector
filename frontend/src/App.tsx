@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BarChart3, Cpu, Sparkles } from 'lucide-react';
 import { TelemetryProvider } from './context/TelemetryContext';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -9,6 +10,8 @@ import { RybnikBenchmarkView } from './components/views/RybnikBenchmarkView';
 import { InflowAnalysisView } from './components/views/InflowAnalysisView';
 import { EnergyView } from './components/views/EnergyView';
 import { IncidentsView } from './components/views/IncidentsView';
+import { HackathonShowcaseView } from './components/views/HackathonShowcaseView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const tourStepsByTab: Record<NavTab, TourStep[]> = {
   scada_twin: [
@@ -65,10 +68,10 @@ const tourStepsByTab: Record<NavTab, TourStep[]> = {
     },
     {
       targetSelector: '[data-tour="bench-export"]',
-      title_pl: '4. Pobranie Raportu dla Jury (CSV)',
-      title_en: '4. Export Jury Rubric Report (CSV)',
-      desc_pl: 'Jedno kliknięcie generuje oficjalny plik z tabelą predykcji spełniającą 100% wymagań regulaminowych hackathonu.',
-      desc_en: 'Single click downloads the official CSV report meeting 100% of the hackathon evaluation requirements.',
+      title_pl: '4. Eksport Raportu Zdarzeń (CSV)',
+      title_en: '4. Export Event Report (CSV)',
+      desc_pl: 'Jedno kliknięcie generuje oficjalny plik z tabelą predykcji i pełnym zestawieniem składowej DWF, przepływu i energii.',
+      desc_en: 'Single click downloads the official CSV report with full DWF baseline, measured flow, and energy audit.',
     },
   ],
   inflow_analysis: [
@@ -95,10 +98,10 @@ const tourStepsByTab: Record<NavTab, TourStep[]> = {
     },
     {
       targetSelector: '[data-tour="inflow-table"]',
-      title_pl: '4. Tabela Oceny Konkursowej',
-      title_en: '4. Competition Scoring Table',
-      desc_pl: 'Dedykowana tabela zawierająca wymagane kolumny: data, godziny wystąpienia, m³, nadmiar kWh oraz koszt PLN.',
-      desc_en: 'Dedicated table with required columns: date, time range, m³, excess kWh, and PLN cost.',
+      title_pl: '4. Zestawienie Wód Przypadkowych',
+      title_en: '4. Accidental Water Breakdown Table',
+      desc_pl: 'Tabela analityczna zawierająca kluczowe kolumny: data, godziny wystąpienia, m³, nadmiar kWh oraz koszt PLN.',
+      desc_en: 'Analytical table with required columns: date, time range, m³, excess kWh, and PLN cost.',
     },
   ],
   energy_costs: [
@@ -129,6 +132,8 @@ const tourStepsByTab: Record<NavTab, TourStep[]> = {
 };
 
 export function AppContent() {
+  const [viewMode, setViewMode] = useState<'hackathon_demo' | 'full_scada'>('hackathon_demo');
+
   const [currentTab, setCurrentTab] = useState<NavTab>(() => {
     try {
       const saved = localStorage.getItem('hydroflow_current_tab');
@@ -138,7 +143,7 @@ export function AppContent() {
     } catch {
       // ignore
     }
-    return 'scada_twin';
+    return 'rybnik_benchmark';
   });
   const [isTourOpen, setIsTourOpen] = useState(false);
 
@@ -154,73 +159,152 @@ export function AppContent() {
   const currentSteps = tourStepsByTab[currentTab] || tourStepsByTab.scada_twin;
 
   return (
-    <div className="min-h-screen bg-[#eceff2] p-4 flex items-center justify-center font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* Outer rounded container mirroring the user's reference images */}
-      <div className="w-full max-w-[1600px] h-[92vh] min-h-[750px] bg-white rounded-[28px] shadow-xl border border-slate-200/80 flex overflow-hidden">
-        {/* Left Navigation Sidebar */}
-        <Sidebar
-          currentTab={currentTab}
-          onTabChange={handleTabChange}
-          onOpenTour={() => setIsTourOpen(true)}
-        />
+    <div className="min-h-screen bg-slate-50 p-3 md:p-5 flex flex-col items-center justify-center font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* Top Application Mode Selector */}
+      <div className="w-full max-w-[1600px] mb-3 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-2.5 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-semibold text-xs shadow-sm">
+            HP
+          </div>
+          <div>
+            <span className="text-sm font-semibold tracking-tight text-gray-900 block">
+              HydroPulse — PWiK Rybnik
+            </span>
+            <span className="text-[11px] text-gray-500 font-normal block">
+              System detekcji wód przypadkowych & bliźniak cyfrowy
+            </span>
+          </div>
+        </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc] overflow-y-auto">
-          {/* Top Sticky Header */}
-          <Header
-            currentTab={currentTab}
-            onOpenTour={() => setIsTourOpen(true)}
-          />
+        {/* The Toggle: Executive Report vs Operational SCADA */}
+        <div className="bg-gray-100 p-1 rounded-lg flex items-center space-x-1 border border-gray-200">
+          <button
+            onClick={() => setViewMode('hackathon_demo')}
+            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ease-out ${
+              viewMode === 'hackathon_demo'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-blue-600" />
+            <span>Raport analityczny (DWF)</span>
+          </button>
+          <button
+            onClick={() => setViewMode('full_scada')}
+            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ease-out ${
+              viewMode === 'full_scada'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Cpu className="w-4 h-4 text-gray-700" />
+            <span>Dyspozytornia SCADA</span>
+          </button>
+        </div>
 
-          {/* Tab View Body: Keep-Alive so all views remain mounted and continuously update */}
-          <main className="flex-1 overflow-y-auto relative">
-            <div
-              className={`h-full ${currentTab === 'scada_twin' ? 'block' : 'hidden'}`}
-              style={{ display: currentTab === 'scada_twin' ? 'block' : 'none' }}
-            >
-              <ScadaTwinView />
-            </div>
-
-            <div
-              className={`h-full ${currentTab === 'rybnik_benchmark' ? 'block' : 'hidden'}`}
-              style={{ display: currentTab === 'rybnik_benchmark' ? 'block' : 'none' }}
-            >
-              <RybnikBenchmarkView />
-            </div>
-
-            <div
-              className={`h-full ${currentTab === 'inflow_analysis' ? 'block' : 'hidden'}`}
-              style={{ display: currentTab === 'inflow_analysis' ? 'block' : 'none' }}
-            >
-              <InflowAnalysisView />
-            </div>
-
-            <div
-              className={`h-full ${currentTab === 'energy_costs' ? 'block' : 'hidden'}`}
-              style={{ display: currentTab === 'energy_costs' ? 'block' : 'none' }}
-            >
-              <EnergyView />
-            </div>
-
-            <div
-              className={`h-full ${currentTab === 'incident_log' ? 'block' : 'hidden'}`}
-              style={{ display: currentTab === 'incident_log' ? 'block' : 'none' }}
-            >
-              <IncidentsView />
-            </div>
-          </main>
+        <div className="hidden sm:flex items-center space-x-2 text-xs">
+          {viewMode === 'hackathon_demo' ? (
+            <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 font-medium">
+              Moduł analityczny
+            </span>
+          ) : (
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+              Moduł dyspozytorski
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Blocking Emergency Modal for Red Alert / Operator ACK */}
-      <EmergencyModal />
+      {/* Outer rounded container mirroring the Corporate Clean style */}
+      <div className="w-full max-w-[1600px] h-[90vh] min-h-[720px] bg-white rounded-xl shadow-sm border border-gray-200 flex overflow-hidden">
+        {viewMode === 'hackathon_demo' ? (
+          /* Report & Analytics Mode */
+          <div className="flex-1 bg-slate-50 overflow-y-auto">
+            <ErrorBoundary fallbackTitle="Wystąpił błąd podczas ładowania widoku analitycznego">
+              <HackathonShowcaseView onSwitchToFullScada={() => setViewMode('full_scada')} />
+            </ErrorBoundary>
+          </div>
+        ) : (
+          /* Full SCADA Mode: Operational dashboard */
+          <>
+            {/* Left Navigation Sidebar */}
+            <Sidebar
+              currentTab={currentTab}
+              onTabChange={handleTabChange}
+              onOpenTour={() => setIsTourOpen(true)}
+            />
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc] overflow-y-auto">
+              {/* Top Sticky Header */}
+              <Header
+                currentTab={currentTab}
+                onOpenTour={() => setIsTourOpen(true)}
+              />
+
+              {/* Tab View Body: Keep-Alive so all views remain mounted and continuously update */}
+              <main className="flex-1 overflow-y-auto relative">
+                <ErrorBoundary fallbackTitle="Błąd w module SCADA Twin">
+                  <div
+                    className={`h-full ${currentTab === 'scada_twin' ? 'block' : 'hidden'}`}
+                    style={{ display: currentTab === 'scada_twin' ? 'block' : 'none' }}
+                  >
+                    <ScadaTwinView />
+                  </div>
+                </ErrorBoundary>
+
+                <ErrorBoundary fallbackTitle="Błąd w module Benchmark Konkursowy">
+                  <div
+                    className={`h-full ${currentTab === 'rybnik_benchmark' ? 'block' : 'hidden'}`}
+                    style={{ display: currentTab === 'rybnik_benchmark' ? 'block' : 'none' }}
+                  >
+                    <RybnikBenchmarkView />
+                  </div>
+                </ErrorBoundary>
+
+                <ErrorBoundary fallbackTitle="Błąd w module Analiza Napływu DWF">
+                  <div
+                    className={`h-full ${currentTab === 'inflow_analysis' ? 'block' : 'hidden'}`}
+                    style={{ display: currentTab === 'inflow_analysis' ? 'block' : 'none' }}
+                  >
+                    <InflowAnalysisView />
+                  </div>
+                </ErrorBoundary>
+
+                <ErrorBoundary fallbackTitle="Błąd w module Audyt Energii">
+                  <div
+                    className={`h-full ${currentTab === 'energy_costs' ? 'block' : 'hidden'}`}
+                    style={{ display: currentTab === 'energy_costs' ? 'block' : 'none' }}
+                  >
+                    <EnergyView />
+                  </div>
+                </ErrorBoundary>
+
+                <ErrorBoundary fallbackTitle="Błąd w module Rejestr Incydentów">
+                  <div
+                    className={`h-full ${currentTab === 'incident_log' ? 'block' : 'hidden'}`}
+                    style={{ display: currentTab === 'incident_log' ? 'block' : 'none' }}
+                  >
+                    <IncidentsView />
+                  </div>
+                </ErrorBoundary>
+              </main>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Blocking Emergency Modal ONLY active in full SCADA mode to prevent disturbing jury presentation */}
+      {viewMode === 'full_scada' && <EmergencyModal />}
 
       {/* Interactive Feature Tour / Spotlight Walkthrough */}
-      <InteractiveTour
-        steps={currentSteps}
-        isOpen={isTourOpen}
-        onClose={() => setIsTourOpen(false)}
-      />
+      {viewMode === 'full_scada' && (
+        <InteractiveTour
+          steps={currentSteps}
+          isOpen={isTourOpen}
+          onClose={() => setIsTourOpen(false)}
+        />
+      )}
     </div>
   );
 }

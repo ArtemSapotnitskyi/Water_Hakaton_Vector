@@ -5,16 +5,18 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Response, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from typing import Optional
+from typing import Optional, Literal, List
 
 from schemas import (
     TelemetrySnapshot, SimulationControlRequest,
     ValveControlRequest, PumpControlRequest,
-    InflowAnalysisResponse, EnergyAnalyticsResponse
+    EnergyAnalyticsResponse, DualModelComparisonResponse
 )
 from hydraulic_engine import hydraulic_engine
 from simulator import simulator
-from etl_service import etl_service
+from etl_service import etl_service, InflowAnalysisResponse, RawVsCleanedStats
+from config import CORS_ORIGINS
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,7 +35,7 @@ app = FastAPI(
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS if CORS_ORIGINS != ["*"] else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,28 +71,88 @@ def set_pump(req: PumpControlRequest):
 
 @app.get("/api/energy/analytics", response_model=EnergyAnalyticsResponse)
 def get_energy_analytics(
-    station: str = Query("PZ1", enum=["PZ1", "PNB1", "ZMP"]),
-    tariff: str = Query("C12A", enum=["C11", "C12A"])
+    station: Literal["PZ1", "PNB1", "ZMP"] = Query("PZ1"),
+    tariff: Literal["C11", "C12A"] = Query("C12A"),
+    preset: Optional[str] = Query(None, description="Preset identifier or active benchmark dataset")
 ):
+    return etl_service.get_energy_analytics(station=station, tariff=tariff, preset=preset)
+
+@app.post("/api/energy/upload", response_model=EnergyAnalyticsResponse)
+async def upload_energy_dataset(
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None),
+    station: Literal["PZ1", "PNB1", "ZMP"] = Query("PZ1"),
+    tariff: Literal["C11", "C12A"] = Query("C12A"),
+    clean_data: bool = Query(True)
+):
+    upload_list = []
+    if files:
+        upload_list.extend(files)
+    if file:
+        upload_list.append(file)
+    if not upload_list:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Brak przesłanych plików.")
+
+    file_tuples = []
+    for f in upload_list:
+        content = await f.read()
+        fname = f.filename or "upload.csv"
+        file_tuples.append((fname, content))
+
+    etl_service.evaluate_uploaded_dataset(files=file_tuples, clean_data=clean_data, model_type="blended")
     return etl_service.get_energy_analytics(station=station, tariff=tariff)
 
 @app.get("/api/inflow-analysis", response_model=InflowAnalysisResponse)
 def get_inflow_analysis(
-    station: str = Query("PZ1", enum=["PZ1", "PNB1"]),
-    sensitivity: float = Query(1.2, ge=1.0, le=2.0)
+    station: Literal["PZ1", "PNB1"] = Query("PZ1"),
+    preset: Optional[str] = Query(None, description="Preset identifier e.g. rybnik_2025_2026_test, pz1_historical, pnb1_historical"),
+    sensitivity: float = Query(1.2, ge=1.0, le=2.0),
+    clean_data: bool = Query(True, description="Enable automated SCADA sensor calibration masking"),
+    model_type: Optional[Literal["statistical_dwf", "ml_ensemble", "blended"]] = Query("blended", description="Forecasting model to use")
 ):
-    return etl_service.get_inflow_analysis(station=station, sensitivity=sensitivity)
+    if preset:
+        return etl_service.evaluate_uploaded_dataset(
+            preset=preset,
+            sensitivity=sensitivity,
+            clean_data=clean_data,
+            model_type=model_type or "blended"
+        )
+    return etl_service.get_inflow_analysis(
+        station=station,
+        sensitivity=sensitivity,
+        clean_data=clean_data,
+        model_type=model_type or "blended"
+    )
+
+@app.get("/api/models/compare", response_model=DualModelComparisonResponse)
+def compare_models(
+    station: Literal["PZ1", "PNB1"] = Query("PZ1"),
+    sensitivity: float = Query(1.2, ge=1.0, le=2.0),
+    clean_data: bool = Query(True, description="Enable automated SCADA sensor calibration masking")
+):
+    return etl_service.get_model_comparison(
+        station=station,
+        sensitivity=sensitivity,
+        clean_data=clean_data
+    )
+
 
 @app.get("/api/incidents")
 def get_incidents():
     return simulator.incidents
 
 @app.get("/api/export/jury-report")
-def export_jury_report(station: str = "PZ1", sensitivity: float = 1.2):
-    analysis = etl_service.get_inflow_analysis(station=station, sensitivity=sensitivity)
+def export_jury_report(
+    station: str = "PZ1",
+    sensitivity: float = 1.2,
+    clean_data: bool = Query(True, description="Enable automated SCADA sensor calibration masking")
+):
+    analysis = etl_service.get_inflow_analysis(station=station, sensitivity=sensitivity, clean_data=clean_data)
     
     # Generate CSV stream matching official jury format
     output = io.StringIO()
+    output.write("\ufeff")
     writer = csv.writer(output, delimiter=";")
     writer.writerow([
         "Data",
@@ -122,19 +184,56 @@ def export_jury_report(station: str = "PZ1", sensitivity: float = 1.2):
     output.seek(0)
     response = StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv"
+        media_type="text/csv; charset=utf-8"
     )
     response.headers["Content-Disposition"] = f"attachment; filename=raport_wody_przypadkowe_{station}.csv"
     return response
 
 @app.post("/api/benchmark/evaluate", response_model=InflowAnalysisResponse)
-def evaluate_benchmark(preset: str = Query("rybnik_2025_2026_test")):
-    return etl_service.evaluate_uploaded_dataset(preset=preset)
+def evaluate_benchmark(
+    preset: str = Query("rybnik_2025_2026_test"),
+    clean_data: bool = Query(True, description="Enable automated SCADA sensor calibration masking"),
+    model_type: Optional[Literal["statistical_dwf", "ml_ensemble", "blended"]] = Query("blended")
+):
+    return etl_service.evaluate_uploaded_dataset(
+        preset=preset,
+        clean_data=clean_data,
+        model_type=model_type or "blended"
+    )
 
 @app.post("/api/benchmark/upload", response_model=InflowAnalysisResponse)
-async def upload_benchmark(file: UploadFile = File(...)):
-    content = await file.read()
-    return etl_service.evaluate_uploaded_dataset(file_content=content, filename=file.filename)
+async def upload_benchmark(
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None),
+    clean_data: bool = Query(True, description="Enable automated SCADA sensor calibration masking"),
+    model_type: Optional[Literal["statistical_dwf", "ml_ensemble", "blended"]] = Query("blended")
+):
+    upload_list = []
+    if files:
+        upload_list.extend(files)
+    if file:
+        upload_list.append(file)
+
+    if not upload_list:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Brak przesłanych plików.")
+
+    file_tuples = []
+    for f in upload_list:
+        content = await f.read()
+        fname = f.filename or "upload.csv"
+        if fname.lower().endswith((".exe", ".bin", ".dll", ".so")) or content.startswith(b"\x4D\x5A"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail=f"Nieobsługiwany format pliku: {fname}")
+        file_tuples.append((fname, content))
+
+    return etl_service.evaluate_uploaded_dataset(
+        files=file_tuples,
+        clean_data=clean_data,
+        model_type=model_type or "blended"
+    )
+
+
 
 @app.get("/api/benchmark/export")
 def export_benchmark_report():
@@ -144,6 +243,7 @@ def export_benchmark_report():
         analysis = etl_service.evaluate_uploaded_dataset(preset="rybnik_2025_2026_test")
 
     output = io.StringIO()
+    output.write("\ufeff")
     writer = csv.writer(output, delimiter=";")
     writer.writerow([
         "Data", "Przedział godzin", "Przepompownia", "Baza DWF [m3]",
@@ -151,18 +251,45 @@ def export_benchmark_report():
         "Koszt strat [PLN] (1 zł/kWh)", "Kategoria anomalii", "Status weryfikacji",
         "Priorytet", "Element sieci", "Przyczyna źródłowa", "Zalecenie dyspozytorskie"
     ])
-    for item in analysis.jury_records:
+    if len(analysis.jury_records) == 0:
+        meas = getattr(analysis, "total_measured_m3", 0.0)
+        dwf_tot = getattr(analysis, "total_dwf_m3", 0.0)
+        acc_tot = getattr(analysis, "total_accidental_m3", 0.0)
+        kwh_tot = getattr(analysis, "total_accidental_energy_kwh", 0.0)
+        pln_tot = getattr(analysis, "financial_cost_pln", 0.0)
+        d_date = "2024-01-01"
+        if analysis.metadata and analysis.metadata.date_range:
+            parts = analysis.metadata.date_range.split(" — ")
+            if len(parts) > 0 and len(parts[0]) >= 10:
+                d_date = parts[0][:10]
         writer.writerow([
-            item.date, item.time_range, item.station, item.dwf_baseline_m3,
-            item.measured_flow_m3, item.accidental_water_m3, item.excess_energy_kwh,
-            item.financial_loss_pln, item.anomaly_type, item.status,
-            getattr(item, "severity", "CRITICAL"),
-            getattr(item, "equipment_affected", "System pomp i kolektorów"),
-            getattr(item, "root_cause", "Udar hydrauliczny wód obcych"),
-            getattr(item, "recommended_action", "Weryfikacja telemetrii i retencja")
+            d_date, "00:00 - 23:00", analysis.station, dwf_tot,
+            meas, acc_tot, kwh_tot, pln_tot,
+            "Brak krytycznych uszkodzeń", "Zweryfikowane",
+            "INFO", "System pomp i kolektorów",
+            f"Przepływ w normie DWF (suma {meas:.1f} m3, nadmiar {acc_tot:.1f} m3 / {pln_tot:.2f} PLN) — stan stabilny",
+            "Bieżący monitoring SCADA"
         ])
+    else:
+        for item in analysis.jury_records:
+            rc = getattr(item, "root_cause", None)
+            if not rc or str(rc).strip() == "" or rc == "Udar hydrauliczny wód obcych":
+                pct_dwf = ((item.measured_flow_m3 - item.dwf_baseline_m3) / max(item.dwf_baseline_m3, 1.0)) * 100.0
+                rc = (
+                    f"Przepływ zmierzony {item.measured_flow_m3:.1f} m3 ({pct_dwf:+.1f}% DWF), "
+                    f"nadmiar energii {item.excess_energy_kwh:.1f} kWh ({item.financial_loss_pln:.2f} PLN) — {item.anomaly_type}"
+                )
+            writer.writerow([
+                item.date, item.time_range, item.station, item.dwf_baseline_m3,
+                item.measured_flow_m3, item.accidental_water_m3, item.excess_energy_kwh,
+                item.financial_loss_pln, item.anomaly_type, item.status,
+                getattr(item, "severity", "CRITICAL"),
+                getattr(item, "equipment_affected", "System pomp i kolektorów"),
+                rc,
+                getattr(item, "recommended_action", "Weryfikacja telemetrii i retencja")
+            ])
     output.seek(0)
-    response = StreamingResponse(iter([output.getvalue()]), media_type="text/csv")
+    response = StreamingResponse(iter([output.getvalue()]), media_type="text/csv; charset=utf-8")
     clean_name = "raport_jury_rybnik"
     if analysis.metadata and analysis.metadata.filename:
         clean_name = analysis.metadata.filename.replace(" ", "_").replace(".", "_")

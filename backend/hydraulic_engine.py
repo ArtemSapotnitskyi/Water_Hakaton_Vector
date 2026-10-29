@@ -41,25 +41,32 @@ class RybnikHydraulicEngine:
         self.total_retention_buffered_m3 = 0.0
         self.total_diverted_to_buffer_m3 = 0.0
 
-    def step(self, dt_seconds: float, rain_mm_h: float, external_storm_inflow: Optional[float] = None) -> Tuple[Dict, Dict, Dict, Dict, List[IncidentRecord]]:
+    def step(self, dt_seconds: float, rain_mm_h: float, external_storm_inflow: Optional[float] = None,
+             actual_pz1_inflow: Optional[float] = None, actual_pnb1_inflow: Optional[float] = None,
+             actual_energy_kwh: Optional[float] = None) -> Tuple[Dict, Dict, Dict, Dict, List[IncidentRecord]]:
         """
         Calculates one timestep for PWiK Rybnik:
         PZ-1 (Zamysłów) & PNB-1 (Niewiadom) -> Kolektor B -> Oczyszczalnia Orzepowice.
+        Supports direct telemetry injection from historical/benchmark datasets.
         """
         new_alarms: List[IncidentRecord] = []
 
-        # 1. Inflows: Dry weather diurnal flow + Storm Infiltration
-        # PZ1 nominal dry flow is ~65 m3/h, spikes up to 250 m3/h in storms
+        # 1. Inflows: Dry weather diurnal flow + Storm Infiltration or direct dataset telemetry
         base_dry_pz1 = 58.0
         base_dry_pnb1 = 22.0
 
-        if external_storm_inflow is not None:
+        if actual_pz1_inflow is not None:
+            pz1_inflow = float(actual_pz1_inflow)
+        elif external_storm_inflow is not None:
             # Scaled for Rybnik PZ-1
             pz1_inflow = (external_storm_inflow / 350.0) * base_dry_pz1 + (rain_mm_h * 4.5)
         else:
             pz1_inflow = base_dry_pz1 + (rain_mm_h * 5.2)
 
-        pnb1_inflow = base_dry_pnb1 + (rain_mm_h * 2.1)
+        if actual_pnb1_inflow is not None:
+            pnb1_inflow = float(actual_pnb1_inflow)
+        else:
+            pnb1_inflow = base_dry_pnb1 + (rain_mm_h * 2.1)
 
         # 2. AUTO Mode Pump Automation
         # When PZ1 volume rises above 50% ZR (155 m3), automatically start Pump 2!
@@ -126,33 +133,74 @@ class RybnikHydraulicEngine:
 
         # Accumulate energy costs
         total_power_kw = power_kw_pz1 + power_kw_pnb1
-        self.cost_accumulated_pln += (total_power_kw * dt_hours) * ELECTRICITY_TARIFF_PLN_KWH
+        if actual_energy_kwh is not None and dt_hours > 0:
+            step_energy_kwh = float(actual_energy_kwh) * dt_hours
+            self.cost_accumulated_pln += step_energy_kwh * ELECTRICITY_TARIFF_PLN_KWH
+        else:
+            self.cost_accumulated_pln += (total_power_kw * dt_hours) * ELECTRICITY_TARIFF_PLN_KWH
 
         # 5. Calculate Status and TTC (Time-To-Critical)
         pz1_pct = (self.pz1_vol / PZ1_ZR_MAX_VOLUME_M3) * 100.0
         pnb1_pct = (self.pnb1_vol / PNB1_ZR_MAX_VOLUME_M3) * 100.0
 
         net_pz1 = pz1_inflow - q_out_pz1
-        ttc_pz1 = 999.0
-        if net_pz1 > 1.0:
-            ttc_pz1 = ((PZ1_ZR_MAX_VOLUME_M3 - self.pz1_vol) / net_pz1) * 60.0
-
+        ttc_pz1: Optional[float] = None
         status_pz1 = "SAFE"
-        if ttc_pz1 < 7.0 or pz1_pct >= 90.0:
+
+        if pz1_pct >= 99.0 or self.pz1_vol >= PZ1_ZR_MAX_VOLUME_M3:
             status_pz1 = "CRITICAL"
-        elif ttc_pz1 < 15.0 or pz1_pct >= 75.0:
+            ttc_pz1 = 0.0  # Capacity reached / overflow
+        elif net_pz1 > 2.0:
+            rem_vol_pz1 = max(0.0, PZ1_ZR_MAX_VOLUME_M3 - self.pz1_vol)
+            calc_ttc_pz1 = (rem_vol_pz1 / net_pz1) * 60.0
+            # TTC countdown is only activated when filling is fast enough to threaten overflow within 60 min
+            # or if tank is already filled to >= 75%
+            if calc_ttc_pz1 <= 60.0 or pz1_pct >= 75.0:
+                ttc_pz1 = round(max(0.1, calc_ttc_pz1), 1)
+                if calc_ttc_pz1 < 7.0 or pz1_pct >= 90.0:
+                    status_pz1 = "CRITICAL"
+                elif calc_ttc_pz1 < 15.0 or pz1_pct >= 75.0:
+                    status_pz1 = "WARNING"
+                else:
+                    status_pz1 = "ELEVATED"
+            else:
+                # Buffer has ample capacity (> 1 hour) under current net flow -> STABLE
+                status_pz1 = "SAFE"
+                ttc_pz1 = None
+        elif pz1_pct >= 85.0:
             status_pz1 = "WARNING"
+        elif pz1_pct >= 75.0:
+            status_pz1 = "ELEVATED"
+        else:
+            status_pz1 = "SAFE"
 
         net_pnb1 = pnb1_inflow - q_out_pnb1
-        ttc_pnb1 = 999.0
-        if net_pnb1 > 1.0:
-            ttc_pnb1 = ((PNB1_ZR_MAX_VOLUME_M3 - self.pnb1_vol) / net_pnb1) * 60.0
-
+        ttc_pnb1: Optional[float] = None
         status_pnb1 = "SAFE"
-        if ttc_pnb1 < 7.0 or pnb1_pct >= 90.0:
+
+        if pnb1_pct >= 99.0 or self.pnb1_vol >= PNB1_ZR_MAX_VOLUME_M3:
             status_pnb1 = "CRITICAL"
-        elif ttc_pnb1 < 15.0 or pnb1_pct >= 75.0:
+            ttc_pnb1 = 0.0
+        elif net_pnb1 > 1.0:
+            rem_vol_pnb1 = max(0.0, PNB1_ZR_MAX_VOLUME_M3 - self.pnb1_vol)
+            calc_ttc_pnb1 = (rem_vol_pnb1 / net_pnb1) * 60.0
+            if calc_ttc_pnb1 <= 60.0 or pnb1_pct >= 75.0:
+                ttc_pnb1 = round(max(0.1, calc_ttc_pnb1), 1)
+                if calc_ttc_pnb1 < 7.0 or pnb1_pct >= 90.0:
+                    status_pnb1 = "CRITICAL"
+                elif calc_ttc_pnb1 < 15.0 or pnb1_pct >= 75.0:
+                    status_pnb1 = "WARNING"
+                else:
+                    status_pnb1 = "ELEVATED"
+            else:
+                status_pnb1 = "SAFE"
+                ttc_pnb1 = None
+        elif pnb1_pct >= 85.0:
             status_pnb1 = "WARNING"
+        elif pnb1_pct >= 75.0:
+            status_pnb1 = "ELEVATED"
+        else:
+            status_pnb1 = "SAFE"
 
         tanks = {
             "R1": TankState(
@@ -164,7 +212,7 @@ class RybnikHydraulicEngine:
                 max_level_m=PZ1_MAX_LEVEL_M,
                 pct_full=round(pz1_pct, 1),
                 status=status_pz1,
-                ttc_minutes=round(ttc_pz1, 1) if ttc_pz1 < 900.0 else None,
+                ttc_minutes=ttc_pz1,
                 inflow_m3_h=round(pz1_inflow, 1),
                 outflow_m3_h=round(q_out_pz1, 1),
             ),
@@ -177,7 +225,7 @@ class RybnikHydraulicEngine:
                 max_level_m=PNB1_MAX_LEVEL_M,
                 pct_full=round(pnb1_pct, 1),
                 status=status_pnb1,
-                ttc_minutes=round(ttc_pnb1, 1) if ttc_pnb1 < 900.0 else None,
+                ttc_minutes=ttc_pnb1,
                 inflow_m3_h=round(pnb1_inflow, 1),
                 outflow_m3_h=round(q_out_pnb1, 1),
             ),

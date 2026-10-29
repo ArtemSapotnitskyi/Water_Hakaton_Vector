@@ -6,7 +6,7 @@ export interface TankState {
   level_m: number;
   max_level_m: number;
   pct_full: number;
-  status: 'SAFE' | 'WARNING' | 'CRITICAL';
+  status: 'SAFE' | 'ELEVATED' | 'WARNING' | 'CRITICAL';
   ttc_minutes: number | null;
   inflow_m3_h: number;
   outflow_m3_h: number;
@@ -75,6 +75,14 @@ export interface TelemetrySnapshot {
   total_outflow_m3_h: number;
   diverted_to_buffer_m3: number;
   cost_accumulated_pln: number;
+  dataset_id?: string;
+  dataset_name?: string;
+  timeline_index?: number;
+  timeline_total?: number;
+  timeline_progress_pct?: number;
+  measured_flow_pz1_m3_h?: number;
+  measured_flow_pnb1_m3_h?: number;
+  measured_energy_kwh?: number;
 }
 
 export interface DatasetMetadata {
@@ -191,6 +199,92 @@ export interface EnergyAnalyticsResponse {
   monthly_trends: EnergyMonthlyItem[];
   scatter_points: { rain_mm_h: number; energy_kwh: number; label: string }[];
   pump_fleet: PumpFleetItem[];
+  dataset_name?: string;
+  dataset_preset?: string;
+  dataset_records?: number;
+  dataset_date_range?: string;
+}
+
+export interface RawVsCleanedStats {
+  is_cleaned: boolean;
+  corrupted_records_count: number;
+  masked_window_start: string;
+  masked_window_end: string;
+  anomaly_description?: string;
+}
+
+export interface FeatureImportanceItem {
+  feature_name: string;
+  display_name: string;
+  importance_pct: number;
+  category: string;
+  description: string;
+}
+
+export interface EvaluationMetricsPayload {
+  mae_flow: number;
+  mape_flow: number;
+  r2_flow: number;
+  mae_energy: number;
+  mape_energy: number;
+  r2_energy: number;
+  smape_energy?: number;
+}
+
+export interface SingleModelEvaluation {
+  model_id: 'statistical_dwf' | 'ml_ensemble' | 'blended';
+  model_name: string;
+  model_description: string;
+  metrics: EvaluationMetricsPayload;
+  training_time_ms: number;
+  inference_time_ms: number;
+}
+
+export interface MetricDeltaItem {
+  absolute_diff: number;
+  improvement_pct: number;
+  winner: 'statistical_dwf' | 'ml_ensemble' | 'tie';
+}
+
+export interface DualModelComparisonResponse {
+  station: string;
+  evaluation_window: Record<string, any>;
+  statistical_dwf: SingleModelEvaluation;
+  ml_ensemble: SingleModelEvaluation;
+  blended: SingleModelEvaluation;
+  deltas: Record<string, MetricDeltaItem>;
+  recommended_model: 'statistical_dwf' | 'ml_ensemble' | 'blended';
+  justification_pl: string;
+  justification_en: string;
+}
+
+export interface Forecast720hItem {
+  timestamp: string;
+  time_label: string;
+  hour_index: number;
+  predicted_flow_m3: number;
+  predicted_energy_kwh: number;
+  dwf_baseline_m3: number;
+  dwf_baseline_kwh: number;
+  lower_95_flow_m3: number;
+  upper_95_flow_m3: number;
+  lower_95_energy_kwh: number;
+  upper_95_energy_kwh: number;
+  risk_level: 'SAFE' | 'ELEVATED' | 'CRITICAL';
+  predicted_kwh?: number;
+  lower_95_kwh?: number;
+  upper_95_kwh?: number;
+}
+
+export interface InfiltrationBreakdown {
+  groundwater_pct: number;
+  groundwater_m3: number;
+  roof_gutters_pct: number;
+  roof_gutters_m3: number;
+  manholes_surface_pct: number;
+  manholes_surface_m3: number;
+  catchment_name: string;
+  methodology?: string;
 }
 
 export interface InflowAnalysisResponse {
@@ -209,4 +303,11 @@ export interface InflowAnalysisResponse {
   forecast_trends?: ForecastItem[];
   failures_summary?: Record<string, number>;
   seasonal_breakdown?: SeasonalBreakdownItem[];
+  raw_vs_cleaned_stats?: RawVsCleanedStats;
+  model_type?: 'statistical_dwf' | 'ml_ensemble' | 'blended' | string;
+  evaluation_metrics?: EvaluationMetricsPayload;
+  feature_importance?: FeatureImportanceItem[];
+  forecast_720h?: Forecast720hItem[];
+  dual_model_comparison?: DualModelComparisonResponse;
+  infiltration_breakdown?: InfiltrationBreakdown;
 }

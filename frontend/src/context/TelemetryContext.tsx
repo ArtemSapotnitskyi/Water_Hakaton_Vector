@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { TelemetrySnapshot } from '../types';
+import { TelemetrySnapshot, InflowAnalysisResponse } from '../types';
 import { getLatestTelemetry, controlSimulation, setValve, setPump } from '../services/api';
 
 type Language = 'pl' | 'en';
@@ -17,14 +17,23 @@ interface TelemetryContextType {
   acknowledgeAlarm: () => void;
   adjustValve: (valveId: string, pct: number) => void;
   togglePump: (pumpId: string, action: 'start' | 'stop' | 'trip') => void;
+  seekSimulationTimeline: (index: number) => void;
+  setSimulationDataset: (datasetId: string) => void;
+  jumpToSimulationEvent: (eventId: string) => void;
   t: (key: string) => string;
+  selectedBenchmarkPreset: string;
+  setSelectedBenchmarkPreset: (preset: string) => void;
+  activeDatasetName: string;
+  setActiveDatasetName: (name: string) => void;
+  benchmarkResult: InflowAnalysisResponse | null;
+  setBenchmarkResult: (res: InflowAnalysisResponse | null) => void;
 }
 
 const translations: Record<Language, Record<string, string>> = {
   pl: {
     overview: 'Przegląd sieci',
     scada_twin: 'Cyfrowy Bliźniak (SCADA)',
-    rybnik_benchmark: 'Test Rybnik 2025–2026',
+    rybnik_benchmark: 'Ewaluacja Rybnik 2025–2026',
     valves_flows: 'Zasuwy i Przepływy',
     inflow_analysis: 'Wody Przypadkowe (DWF)',
     energy_costs: 'Efektywność i Koszty',
@@ -32,18 +41,18 @@ const translations: Record<Language, Record<string, string>> = {
     incident_log: 'Dziennik Zdarzeń',
     notifications: 'Powiadomienia',
     settings: 'Ustawienia',
-    help: 'Pomoc i Regulamin',
+    help: 'Pomoc i Dokumentacja',
     dispatcher: 'Dyspozytor Główny',
     role: 'PWiK Centrum Dyspozytorskie',
     live_scada: 'Telemetria Na Żywo',
     auto_mode: 'AUTO (Algorytm)',
     manual_mode: 'MANUAL (Dyspozytor)',
-    export_report: 'Eksportuj Raport',
-    storm_replay: 'Ścieżka burzy 13.07.2024',
-    inject_disaster: 'Wstrzyknij Awarię',
-    rain_spike: '🌧️ Nawałnica 194.8 mm/h',
-    pump_trip: '⚠️ Awaria Pompy P1',
-    reset_state: '🔄 Reset parametrów',
+    export_report: 'Eksportuj Raport (CSV)',
+    storm_replay: 'Scenariusz burzowy 13.07.2024',
+    inject_disaster: 'Symulacja Zdarzeń',
+    rain_spike: 'Nawałnica 194.8 mm/h',
+    pump_trip: 'Awaria Pompy P1',
+    reset_state: 'Reset parametrów',
     alarm_critical: 'ALARM KRYTYCZNY',
     confirm_alarm: 'Potwierdź przyjęcie alarmu (ACK)',
     execute_emergency: 'Zastosuj procedurę awaryjną (Otwórz Z12)',
@@ -55,7 +64,7 @@ const translations: Record<Language, Record<string, string>> = {
   en: {
     overview: 'Network Overview',
     scada_twin: 'Digital Twin (SCADA)',
-    rybnik_benchmark: 'Rybnik 2025–2026 Benchmark',
+    rybnik_benchmark: 'Rybnik 2025–2026 Evaluation',
     valves_flows: 'Valves & Flow Routing',
     inflow_analysis: 'Inflow & Infiltration (DWF)',
     energy_costs: 'Energy & Financial Costs',
@@ -63,18 +72,18 @@ const translations: Record<Language, Record<string, string>> = {
     incident_log: 'Incident Log',
     notifications: 'Notifications',
     settings: 'Settings',
-    help: 'Help & Competition Rules',
+    help: 'Help & Documentation',
     dispatcher: 'Chief Dispatcher',
     role: 'PWiK Operations Center',
     live_scada: 'Live SCADA Stream',
     auto_mode: 'AUTO (Algorithmic)',
     manual_mode: 'MANUAL (Override)',
-    export_report: 'Export Report',
+    export_report: 'Export Report (CSV)',
     storm_replay: 'Historic Storm 13.07.2024',
-    inject_disaster: 'Inject Disaster',
-    rain_spike: '🌧️ Flash Flood 194.8 mm/h',
-    pump_trip: '⚠️ Trip Pump P1',
-    reset_state: '🔄 Reset System',
+    inject_disaster: 'Simulate Event',
+    rain_spike: 'Flash Flood 194.8 mm/h',
+    pump_trip: 'Pump P1 Trip',
+    reset_state: 'Reset System',
     alarm_critical: 'CRITICAL ALARM',
     confirm_alarm: 'Acknowledge Alarm (ACK)',
     execute_emergency: 'Execute Emergency Diversion (Open Z12)',
@@ -91,6 +100,9 @@ export const TelemetryProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [telemetry, setTelemetry] = useState<TelemetrySnapshot | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [lang, setLang] = useState<Language>('pl');
+  const [selectedBenchmarkPreset, setSelectedBenchmarkPreset] = useState<string>('rybnik_2025_2026_test');
+  const [activeDatasetName, setActiveDatasetName] = useState<string>('Zbiór Ewaluacyjny Rybnik 2025–2026');
+  const [benchmarkResult, setBenchmarkResult] = useState<InflowAnalysisResponse | null>(null);
 
   const t = (key: string): string => {
     return translations[lang]?.[key] || key;
@@ -150,6 +162,12 @@ export const TelemetryProvider: React.FC<{ children: ReactNode }> = ({ children 
   const acknowledgeAlarm = () => controlSimulation({ action: 'acknowledge_alarm' });
   const adjustValve = (valveId: string, pct: number) => setValve(valveId, pct);
   const togglePump = (pumpId: string, action: 'start' | 'stop' | 'trip') => setPump(pumpId, action);
+  const seekSimulationTimeline = (index: number) =>
+    controlSimulation({ action: 'seek_timeline', timeline_index: index });
+  const setSimulationDataset = (datasetId: string) =>
+    controlSimulation({ action: 'set_dataset', dataset_id: datasetId });
+  const jumpToSimulationEvent = (eventId: string) =>
+    controlSimulation({ action: 'jump_to_event', disaster_type: eventId });
 
   return (
     <TelemetryContext.Provider
@@ -166,7 +184,16 @@ export const TelemetryProvider: React.FC<{ children: ReactNode }> = ({ children 
         acknowledgeAlarm,
         adjustValve,
         togglePump,
+        seekSimulationTimeline,
+        setSimulationDataset,
+        jumpToSimulationEvent,
         t,
+        selectedBenchmarkPreset,
+        setSelectedBenchmarkPreset,
+        activeDatasetName,
+        setActiveDatasetName,
+        benchmarkResult,
+        setBenchmarkResult,
       }}
     >
       {children}

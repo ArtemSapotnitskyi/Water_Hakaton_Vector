@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Tabela Statusów Awarii i Formuł — PWiK Rybnik</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-light: #eff6ff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #16a34a;
+      --success-bg: #dcfce7;
+      --warning: #ca8a04;
+      --warning-bg: #fef9c3;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --info: #0284c7;
+      --info-bg: #e0f2fe;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: #f8fafc;
+      margin: 0;
+      padding: 32px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+      padding: 40px;
+    }
+    header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    .badge-pwik {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 26px;
+      color: #0f172a;
+      font-weight: 800;
+    }
+    p.lead {
+      color: var(--text-muted);
+      margin: 0;
+      font-size: 14px;
+    }
+    .formula-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid var(--primary);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    .formula-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .math-block {
+      font-family: "Courier New", Courier, monospace;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #1e293b;
+      margin: 6px 0;
+      display: inline-block;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 24px 0;
+      font-size: 13px;
+    }
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 2px solid #cbd5e1;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    td {
+      padding: 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:hover {
+      background: #f8fafc;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .status-radar { background: var(--success-bg); color: #15803d; border: 1px solid #bbf7d0; }
+    .status-rain { background: #dcfce7; color: #166534; border: 1px solid #86efac; font-weight: 800; }
+    .status-cctv { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; font-weight: 800; }
+    .status-pending { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .status-hardware { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-weight: 800; }
+    .btn-print {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      float: right;
+    }
+    .btn-print:hover { background: #1d4ed8; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .container { box-shadow: none; border: none; padding: 0; }
+      .btn-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <button class="btn-print" onclick="window.print()">🖨️ Drukuj / Zapisz jako PDF</button>
+  <header>
+    <span class="badge-pwik">PWiK Rybnik — AI & SCADA Dispatcher</span>
+    <h1>Tabela Kwalifikacji Statusów Awarii i Formuł Matematycznych</h1>
+    <p class="lead">Zasady automatycznej klasyfikacji anomalii, algorytmy detekcji i działania naprawcze dla Komisji Konkursowej</p>
+  </header>
+
+  <!-- Formula summary -->
+  <div class="formula-card">
+    <div class="formula-title">📐 Podstawowe Formuły Bilansowe (Norma ATV-A 118 / PN-EN 752)</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+      <div>
+        <strong>1. Wody Przypadkowe (Obce):</strong><br>
+        <span class="math-block">V_przyp = ∑ max(0, Q_zmierzony - DWF) · Δt [m³]</span><br>
+        <small style="color: var(--text-muted);">Czysty wolumen zalań i nieszczelności ponad dobową normę DWF.</small>
+      </div>
+      <div>
+        <strong>2. Nadmiar Energii (kWh):</strong><br>
+        <span class="math-block">E_nadmiar = V_przyp · SEU [kWh]</span><br>
+        <small style="color: var(--text-muted);">PZ-1: SEU = 0.08 kWh/m³ | PNB-1: SEU = 0.31 kWh/m³</small>
+      </div>
+      <div>
+        <strong>3. Koszt Finansowy (PLN):</strong><br>
+        <span class="math-block">Koszt = E_nadmiar · 1.00 zł/kWh</span><br>
+        <small style="color: var(--text-muted);">Sztywny taryfowy koszt pompowania wód obcych wg regulaminu.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Table -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 20%;">Typ Zdarzenia</th>
+        <th style="width: 18%;">Status w Systemie</th>
+        <th style="width: 24%;">Warunek Matematyczny & Progi</th>
+        <th style="width: 18%;">Aparatura & Walidacja</th>
+        <th style="width: 20%;">Działanie Dyspozytorskie</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <strong style="color: #991b1b;">Ekstremalny opad nawalny</strong><br>
+          <small style="color: var(--text-muted);">Gwałtowny udar zlewowy (burza stulecia)</small>
+        </td>
+        <td><span class="status-badge status-rain">Zweryfikowane (Deszczomierz)</span></td>
+        <td>
+          <span class="math-block">Q_szczyt / DWF ≥ 5.0</span><br>
+          lub <span class="math-block">Q_szczyt ≥ 500 m³/h</span>
+        </td>
+        <td>Naziemny deszczomierz wagowy PWiK / stacja IMGW Rybnik</td>
+        <td>Awaryjne otwarcie zasuw do komory retencyjnej 1500 m³; kaskada 3 pomp w punkcie BEP; alarm TTC.</td>
+      </tr>
+      <tr>
+        <td>
+          <strong style="color: #1e40af;">Udar opadowy wód deszczowych</strong><br>
+          <small style="color: var(--text-muted);">Silny deszcz frontowy</small>
+        </td>
+        <td><span class="status-badge status-radar">Zweryfikowane (Radar)</span></td>
+        <td>
+          <span class="math-block">3.8 ≤ Q_szczyt / DWF &lt; 5.0</span><br>
+          oraz <span class="math-block">Δt ≤ 24 h</span>
+        </td>
+        <td>Radar meteorologiczny dopplerowski IMGW (stacja Ramża)</td>
+        <td>Załączenie pompy szczytowej P2; przekierowanie nadmiaru ścieków do zbiornika buforowego R2.</td>
+      </tr>
+      <tr>
+        <td>
+          <strong style="color: #0f766e;">Długotrwała infiltracja wód gruntowych</strong><br>
+          <small style="color: var(--text-muted);">Nieszczelność rurociągu (pęknięcia / nieszczelne włazy)</small>
+        </td>
+        <td><span class="status-badge status-cctv">Do inspekcji CCTV</span></td>
+        <td>
+          <span class="math-block">Δt ≥ 12 h</span><br>
+          oraz <span class="math-block">Q_szczyt / DWF &lt; 4.0</span><br>
+          <small>(napływ trwa po ustąpieniu opadu)</small>
+        </td>
+        <td>Brak opadu w deszczomierzu; podwyższone piezometry wód gruntowych</td>
+        <td><strong>Zlecenie inspekcji CCTV:</strong> wysłanie wozu z kamerą samojezdną DN400, próba dymowa i renowacja rękawem CIPP.</td>
+      </tr>
+      <tr>
+        <td>
+          <strong style="color: #854d0e;">Umiarkowany napływ burzowy</strong><br>
+          <small style="color: var(--text-muted);">Typowy deszcz przelotny</small>
+        </td>
+        <td><span class="status-badge status-pending">W trakcie weryfikacji</span></td>
+        <td>
+          <span class="math-block">1.5 ≤ Q_szczyt / DWF &lt; 3.8</span><br>
+          oraz <span class="math-block">Δt &lt; 12 h</span>
+        </td>
+        <td>Bilansowanie hydrauliczne stacji kaskadowych (PZ-2, PZ-4)</td>
+        <td>Płynna regulacja obrotów pomp falownikiem (VFD 45 Hz); dławienie napływu do poziomu nominalnego.</td>
+      </tr>
+      <tr>
+        <td>
+          <strong style="color: #dc2626;">Awaria pompy: Zablokowanie wirnika</strong><br>
+          <small style="color: var(--text-muted);">Zatkanie ciałami stałymi / szmatami</small>
+        </td>
+        <td><span class="status-badge status-hardware">Zlecono serwis mechaniczny</span></td>
+        <td>
+          <span class="math-block">SEU = E / Q &gt; 0.8 kWh/m³</span><br>
+          <small>(norma: 0.08–0.12 kWh/m³)</small>
+        </td>
+        <td>Telemetria prądu SCADA (I &gt; 40 A) vs spadek przepływu</td>
+        <td>Automatyczne wyłączenie pompy P1; start pompy rezerwowej P2; wezwanie brygady do oczyszczenia wirnika.</td>
+      </tr>
+      <tr>
+        <td>
+          <strong style="color: #dc2626;">Zacięcie klapy zwrotnej / zamknięta zasuwa</strong><br>
+          <small style="color: var(--text-muted);">Praca pompy na odcięty rurociąg</small>
+        </td>
+        <td><span class="status-badge status-hardware">Zgłoszone do dyspozytorni</span></td>
+        <td>
+          <span class="math-block">Q &lt; 1.0 m³/h</span> oraz <span class="math-block">E ≥ 7.0 kWh</span>
+        </td>
+        <td>Sygnał stycznika `P1_RUN=1` przy zerowym przepływie</td>
+        <td>Natychmiastowe zatrzymanie pompy (ochrona przed przegrzaniem i kawitacją); rewizja klapy zwrotnej DN250.</td>
+      </tr>
+      <tr>
+        <td>
+          <strong style="color: #475569;">Awaria aparatury / Zamrożenie licznika</strong><br>
+          <small style="color: var(--text-muted);">Usterka przetwornika SCADA</small>
+        </td>
+        <td><span class="status-badge" style="background:#e2e8f0; color:#334155;">Zweryfikowane</span></td>
+        <td>
+          <span class="math-block">ΔQ = 0 przez &gt; 6 h (pompa ON)</span><br>
+          lub skok <span class="math-block">ΔQ &gt; 5000 m³/h</span>
+        </td>
+        <td>Weryfikacja spójności sumatora telemetrii SCADA</td>
+        <td>Automatyczne nałożenie maski rekonstrukcyjnej DWF; zdalny restart modułu PLC i rekalibracja.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Pitch Note -->
+  <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px 20px; font-size: 13px; color: #1e3a8a;">
+    <strong>💡 Jak wytłumaczyć to Jury w 30 sekund:</strong><br>
+    <em>„Nasz algorytm nie traktuje wszystkich anomalii jednakowo. Po pierwsze, rozróżnia <strong>ekstremalny deszcz</strong> (potwierdzony deszczomierzem i radarem) od <strong>awarii rur</strong> (długotrwała infiltracja kierowana na CCTV) oraz <strong>awarii samych pomp</strong> (skok poboru energii SEU przy braku tłoczenia). Dzięki temu dyspozytor natychmiast wie, czy ma otwierać zbiornik retencyjny, czy wysyłać ekipę z kamerą do kanału”.</em>
+  </div>
+</div>
+
+</body>
+</html>

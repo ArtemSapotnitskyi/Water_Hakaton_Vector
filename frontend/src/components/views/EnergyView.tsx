@@ -22,10 +22,13 @@ import {
   Info,
   ShieldCheck,
   ChevronRight,
-  Send
+  Send,
+  Database,
+  UploadCloud,
+  X
 } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
-import { getEnergyAnalytics } from '../../services/api';
+import { getEnergyAnalytics, uploadEnergyDataset } from '../../services/api';
 import {
   EnergyAnalyticsResponse,
   EnergyHourlyItem,
@@ -34,7 +37,9 @@ import {
 } from '../../types';
 
 export const EnergyView: React.FC = () => {
-  const { telemetry, lang } = useTelemetry();
+  const { telemetry, lang, activeDatasetName } = useTelemetry();
+  const [selectedPreset, setSelectedPreset] = useState<string>('PZ1');
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [station, setStation] = useState<'PZ1' | 'PNB1' | 'ZMP'>('PZ1');
   const [tariff, setTariff] = useState<'C11' | 'C12A'>('C12A');
   const [data, setData] = useState<EnergyAnalyticsResponse | null>(null);
@@ -59,48 +64,74 @@ export const EnergyView: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Fetch energy analytics
-  useEffect(() => {
-    setLoading(true);
-    getEnergyAnalytics(station, tariff)
-      .then((res) => {
+  // Handle direct file upload for energy analysis
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setUploadedFiles(files);
+      setSelectedPreset('custom_files');
+      setLoading(true);
+      try {
+        const res = await uploadEnergyDataset(files, station, tariff);
         setData(res);
         if (res.hourly_cycle.length > 0) {
-          // Pre-select the peak hour
           setSelectedHour(res.hourly_cycle[8] || res.hourly_cycle[0]);
         }
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [station, tariff]);
-
-  // Reactive power and efficiency from live SCADA twin
-  const livePowerKw = useMemo(() => {
-    if (!telemetry || !telemetry.pumps) {
-      return data?.current_power_kw || 48.2;
-    }
-    // Calculate total active power from telemetry pumps
-    let totalKw = 0;
-    Object.values(telemetry.pumps).forEach((p) => {
-      if (p.status === 'RUNNING' || p.status === 'DEGRADED') {
-        totalKw += p.power_kw;
+        showToast(
+          lang === 'pl'
+            ? `Wczytano i przeliczono efektywność dla: ${files.map((f) => f.name).join(', ')}`
+            : `Uploaded and evaluated energy for: ${files.map((f) => f.name).join(', ')}`
+        );
+      } catch (err) {
+        console.error('Energy upload error:', err);
+        showToast('Błąd wczytywania pliku energii.');
+      } finally {
+        setLoading(false);
       }
-    });
-    return totalKw > 0 ? parseFloat(totalKw.toFixed(1)) : (data?.current_power_kw || 48.2);
-  }, [telemetry, data]);
+    }
+  };
+
+  // Fetch energy analytics dynamically based on uploaded files or selected preset
+  useEffect(() => {
+    setLoading(true);
+    if (uploadedFiles.length > 0) {
+      uploadEnergyDataset(uploadedFiles, station, tariff)
+        .then((res) => {
+          setData(res);
+          if (res.hourly_cycle.length > 0) {
+            setSelectedHour(res.hourly_cycle[8] || res.hourly_cycle[0]);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    } else {
+      getEnergyAnalytics(station, tariff, selectedPreset)
+        .then((res) => {
+          setData(res);
+          if (res.hourly_cycle.length > 0) {
+            setSelectedHour(res.hourly_cycle[8] || res.hourly_cycle[0]);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    }
+  }, [station, tariff, selectedPreset]);
+
+  // Reactive power and efficiency dynamically calculated from active dataset
+  const livePowerKw = useMemo(() => {
+    return data?.current_power_kw || 48.2;
+  }, [data]);
 
   const livePumpP1Kw = useMemo(() => {
-    if (telemetry?.pumps?.['p1']) {
-      const p = telemetry.pumps['p1'];
-      return p.status === 'FAULT' ? 0.0 : parseFloat(p.power_kw.toFixed(1));
+    if (telemetry?.pumps?.['p1']?.status === 'FAULT') {
+      return 0.0;
     }
     return data?.p1_kw || 24.1;
   }, [telemetry, data]);
 
   const livePumpP2Kw = useMemo(() => {
-    if (telemetry?.pumps?.['p2']) {
-      const p = telemetry.pumps['p2'];
-      return p.status === 'FAULT' ? 0.0 : parseFloat(p.power_kw.toFixed(1));
+    if (telemetry?.pumps?.['p2']?.status === 'FAULT') {
+      return 0.0;
     }
     return data?.p2_kw || 24.1;
   }, [telemetry, data]);
@@ -156,40 +187,111 @@ export const EnergyView: React.FC = () => {
         </div>
       )}
 
-      {/* Top Station & Tariff Filter Bar */}
+      {/* Top Station, Dataset & File Upload Bar */}
       <div className="flex items-center justify-between flex-wrap gap-4 pb-2 border-b border-slate-200">
-        {/* Station Selectors */}
-        <div className="flex items-center space-x-2 bg-[#f1f3f6] p-1 rounded-xl border border-slate-200/60">
+        {/* Preset & Station Selectors */}
+        <div className="flex items-center space-x-1.5 bg-[#f1f3f6] p-1 rounded-xl border border-slate-200/60 flex-wrap">
           <button
-            onClick={() => setStation('PZ1')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              station === 'PZ1'
-                ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-900'
+            onClick={() => {
+              setUploadedFiles([]);
+              setSelectedPreset('konkurs_merged_2025_2026');
+              setStation('PZ1');
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+              selectedPreset === 'konkurs_merged_2025_2026' && uploadedFiles.length === 0
+                ? 'bg-white text-blue-700 shadow-2xs border border-blue-200'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            PZ-1 (ul. Pełczyńskiego / Zamysłów)
+            <span>Zbiór 2025–2026 (PZ-1 + PNB-1)</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
+              Konkurs
+            </span>
           </button>
+
           <button
-            onClick={() => setStation('PNB1')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              station === 'PNB1'
+            onClick={() => {
+              setUploadedFiles([]);
+              setSelectedPreset('pz1_historical');
+              setStation('PZ1');
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              (selectedPreset === 'pz1_historical' || selectedPreset === 'PZ1') && uploadedFiles.length === 0
                 ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-900'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            PZ-1 (ul. Pełczyńskiego)
+          </button>
+
+          <button
+            onClick={() => {
+              setUploadedFiles([]);
+              setSelectedPreset('pnb1_historical');
+              setStation('PNB1');
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              (selectedPreset === 'pnb1_historical' || selectedPreset === 'PNB1') && uploadedFiles.length === 0
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             PNB-1 (Zlewnia Niewiadom)
           </button>
+
           <button
-            onClick={() => setStation('ZMP')}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              station === 'ZMP'
+            onClick={() => {
+              setUploadedFiles([]);
+              setSelectedPreset('ZMP');
+              setStation('ZMP');
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              selectedPreset === 'ZMP' && uploadedFiles.length === 0
                 ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-900'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             ZMP Ruda Śląska (Szczyt 13.07)
           </button>
+
+          {/* Direct File Upload Button */}
+          <label
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+              uploadedFiles.length > 0
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span className="truncate max-w-[150px]">
+              {uploadedFiles.length > 0
+                ? uploadedFiles.length === 1
+                  ? uploadedFiles[0].name
+                  : `${uploadedFiles.length} tabel`
+                : 'Wgraj plik (CSV/TXT)'}
+            </span>
+            <input
+              type="file"
+              multiple
+              accept=".csv,.txt,.tsv,.xlsx,.ods"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </label>
+
+          {uploadedFiles.length > 0 && (
+            <button
+              onClick={() => {
+                setUploadedFiles([]);
+                setSelectedPreset('pz1_historical');
+                setStation('PZ1');
+              }}
+              title="Wyczyść pliki"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Tariff Switcher */}
@@ -239,7 +341,7 @@ export const EnergyView: React.FC = () => {
           className="p-4 rounded-2xl bg-white border border-[#e8ecf1] shadow-2xs cursor-pointer hover:border-emerald-300 transition-all group"
         >
           <div className="flex items-center justify-between text-xs text-slate-400 font-semibold mb-1">
-            <span>Stawka Energii (Mentor PWiK)</span>
+            <span>Stawka Rozliczeniowa Energii</span>
             <DollarSign className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black text-slate-900">
@@ -295,7 +397,7 @@ export const EnergyView: React.FC = () => {
           >
             {liveEfficiencyPct >= 80
               ? 'Brak objawów kawitacji / zatkania'
-              : '⚠️ Podwyższone opory hydrauliczne'}
+              : 'Podwyższone opory hydrauliczne'}
           </div>
         </div>
 
@@ -331,7 +433,7 @@ export const EnergyView: React.FC = () => {
                 Korelacja Opadów z Zużyciem Energii ({data.station.split(':')[1] || data.station})
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Wykres godzinowy: gwałtowny wzrost poboru mocy po fali deszczowej z przesunięciem czasowym 15–25 min
+                Zbiór: {data.dataset_name || activeDatasetName} • Wykres godzinowy: wzrost poboru mocy po fali deszczowej
               </p>
             </div>
 
@@ -355,7 +457,7 @@ export const EnergyView: React.FC = () => {
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Miesiące (2024)
+                Miesiące
               </button>
               <button
                 onClick={() => setChartMode('scatter')}
@@ -588,7 +690,9 @@ export const EnergyView: React.FC = () => {
               </div>
               <p className="text-[11px] leading-relaxed text-amber-900/90 font-medium">
                 Zatrzymanie zrzutu ze zbiornika R2 (zamknięcie zasuwy Z24) w godzinach 20:00 – 21:00 pozwala zaoszczędzić do{' '}
-                <strong className="text-slate-900">4 200 PLN/miesięcznie</strong> na energii elektrycznej.
+                <strong className="text-slate-900">
+                  {Math.round((data.potential_savings_c12a_pln || 50400) / 12).toLocaleString()} PLN/miesięcznie
+                </strong> na energii elektrycznej.
               </p>
             </div>
           </div>
